@@ -1,18 +1,34 @@
 import streamlit as st
-import os, json, re, time, datetime
+import os, json, re, time
 import PyPDF2
 from groq import Groq
 
 # ================= CONFIG =================
-st.set_page_config(page_title="🔥 IPO EXAM AI V4", layout="wide")
+st.set_page_config(page_title="📘 IPO EXAM AI", layout="wide")
 
-# ================= UI =================
+# ================= LIGHT UI =================
 st.markdown("""
 <style>
-.stApp {background:linear-gradient(135deg,#0f0f0f,#1c1c1c); color:white;}
-h1,h2,h3 {color:#e50914;}
-.stButton button {background:#e50914;color:white;border-radius:8px;}
-.card {background:#1e1e1e;padding:20px;border-radius:12px;margin:10px 0;}
+.stApp {
+    background: linear-gradient(135deg,#f5f7fa,#e4ecf7);
+    color:#1e293b;
+}
+h1,h2,h3 {
+    color:#1e3a8a;
+}
+.stButton button {
+    background:#2563eb;
+    color:white;
+    border-radius:10px;
+    padding:10px;
+}
+.card {
+    background:white;
+    padding:20px;
+    border-radius:12px;
+    margin:10px 0;
+    box-shadow:0 4px 10px rgba(0,0,0,0.08);
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -46,21 +62,21 @@ def read_pdf(file):
 defaults = {
     "quiz":[], "index":0, "score":0,
     "start_time":None, "weak_topics":[],
-    "daily_plan":"", "history":[]
+    "daily_plan":""
 }
 for k,v in defaults.items():
     if k not in st.session_state:
         st.session_state[k]=v
 
 # ================= HEADER =================
-st.title("🔥 IPO 2026 AI MASTER SYSTEM (V4)")
+st.title("📘 IPO 2026 AI MASTER PREP SYSTEM")
 st.markdown("📚 Notes | 🧠 MCQ | 📝 Exam | 📊 PYQ | 🎯 Weak AI | 📅 Planner")
 
 # ================= INPUT =================
 col1,col2 = st.columns(2)
 
 with col1:
-    topic = st.text_input("🎯 Topic")
+    topic = st.text_input("🎯 Enter Topic")
 
 with col2:
     pdf = st.file_uploader("📄 Upload PDF", type="pdf")
@@ -83,7 +99,7 @@ with c3:
 negative = st.checkbox("Negative Marking (-0.25)")
 
 # ================= MODE =================
-mode = st.selectbox("Mode",[
+mode = st.selectbox("Select Mode",[
     "📖 Notes",
     "🧠 MCQ Practice",
     "📝 Exam Simulator",
@@ -100,21 +116,13 @@ if mode=="📖 Notes":
 # ================= MCQ =================
 if mode=="🧠 MCQ Practice":
     if content and st.button("Generate MCQ"):
-        raw=ask(f"""
-        Generate {num_q} MCQ in {lang}
-        JSON: question, options, correct_answer
-        {content}
-        """)
-        st.write(raw)
+        st.write(ask(f"Generate {num_q} MCQ in {lang} JSON:\n{content}"))
 
 # ================= EXAM =================
 if mode=="📝 Exam Simulator":
 
     if st.button("Start Exam"):
-        raw=ask(f"""
-        Generate {num_q} MCQ JSON
-        IPO exam level {lang}
-        """)
+        raw=ask(f"Generate {num_q} MCQ JSON IPO exam {lang}")
         try:
             data=json.loads(re.search(r'\{.*\}',raw,re.DOTALL).group())
             st.session_state.quiz=data["questions"]
@@ -124,15 +132,14 @@ if mode=="📝 Exam Simulator":
         except:
             st.error("Parsing error")
 
-    # TIMER
     if st.session_state.start_time:
         elapsed=time.time()-st.session_state.start_time
         rem=int(timer_min*60-elapsed)
         st.warning(f"⏱️ Time Left: {rem//60}:{rem%60}")
 
-    # QUIZ
     if st.session_state.quiz:
         q=st.session_state.quiz[st.session_state.index]
+
         st.markdown(f"<div class='card'><h3>Q{st.session_state.index+1}</h3>{q['question']}</div>",unsafe_allow_html=True)
 
         ans=st.radio("Select",q["options"])
@@ -140,14 +147,13 @@ if mode=="📝 Exam Simulator":
         if st.button("Submit"):
             if ans==q["correct_answer"]:
                 st.session_state.score+=1
-                st.success("Correct")
+                st.success("Correct ✅")
             else:
                 if negative:
                     st.session_state.score-=0.25
-                st.error(f"Wrong | {q['correct_answer']}")
+                st.error(f"Wrong ❌ | {q['correct_answer']}")
 
-                # 🔥 weak topic detect
-                topic_name=ask(f"Topic of this question: {q['question']}")
+                topic_name=ask(f"Topic: {q['question']}")
                 st.session_state.weak_topics.append(topic_name)
 
         if st.button("Next"):
@@ -156,17 +162,13 @@ if mode=="📝 Exam Simulator":
             else:
                 st.success("Exam Finished")
 
-    # RESULT
     if st.session_state.quiz and st.session_state.index==len(st.session_state.quiz)-1:
         st.metric("Score",st.session_state.score)
 
 # ================= PYQ =================
 if mode=="📊 PYQ Analyzer":
-    if st.button("Analyze PYQ"):
-        st.write(ask("""
-        Analyze last 10 year IPO exam
-        Give repeated topics, patterns, scoring areas
-        """))
+    if st.button("Analyze"):
+        st.write(ask("Analyze IPO exam last 10 years PYQ trends"))
 
 # ================= DAILY PLAN =================
 if mode=="📅 Daily Plan":
@@ -176,27 +178,26 @@ if mode=="📅 Daily Plan":
         st.write(plan)
 
     if st.session_state.weak_topics:
-        st.warning("⚠️ Revise weak topics today!")
+        st.warning("⚠️ Revise your weak topics today!")
 
 # ================= WEAK TRAINER =================
 if mode=="🎯 Weak Topic Trainer":
     if st.session_state.weak_topics:
         topics=list(set(st.session_state.weak_topics))
-
         for t in topics:
             with st.expander(f"⚠️ {t}"):
 
-                if st.button(f"Learn {t}"):
-                    st.write(ask(f"Teach {t} simply Hindi+English"))
+                if st.button(f"📖 Learn {t}"):
+                    st.write(ask(f"Teach {t} Hindi + English"))
 
-                if st.button(f"Practice {t}"):
-                    st.write(ask(f"Give 5 MCQ on {t}"))
+                if st.button(f"🧠 Practice {t}"):
+                    st.write(ask(f"Give MCQ on {t}"))
 
-                if st.button(f"Revise {t}"):
+                if st.button(f"🔁 Revise {t}"):
                     st.write(ask(f"Quick revision {t}"))
     else:
         st.info("No weak topics yet")
 
 # ================= FOOTER =================
 st.markdown("---")
-st.caption("🔥 Powered by AI | IPO 2026 Prep System")
+st.caption("📘 IPO 2026 AI Prep System | Light UI Version")
