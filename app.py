@@ -32,7 +32,7 @@ st.markdown("""
         background: linear-gradient(135deg, #1e3c72, #2a5298);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        font-size: 2.8rem;
+        font-size: 2.5rem;
         border-left: 5px solid #1e3c72;
         padding-left: 20px;
     }
@@ -41,7 +41,6 @@ st.markdown("""
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
         border-right: 1px solid #e0e0e0;
-        box-shadow: 2px 0 10px rgba(0,0,0,0.05);
     }
     
     /* Button styling */
@@ -54,13 +53,11 @@ st.markdown("""
         border-radius: 8px;
         padding: 10px 24px;
         transition: all 0.3s ease;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
     
     .stButton button:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(30,60,114,0.3);
-        background: linear-gradient(90deg, #2a5298, #1e3c72);
     }
     
     /* Card styling */
@@ -85,42 +82,12 @@ st.markdown("""
         color: #1e3c72;
     }
     
-    /* Radio buttons */
-    .stRadio label {
-        font-size: 15px;
-        padding: 8px;
-        border-radius: 8px;
-        transition: all 0.2s;
-    }
-    
-    .stRadio label:hover {
-        background: rgba(30,60,114,0.05);
-    }
-    
-    /* Success/Error messages */
-    .stAlert {
-        border-radius: 8px;
-    }
-    
-    /* Expander styling */
-    .streamlit-expanderHeader {
-        background: rgba(30,60,114,0.05);
-        border-radius: 8px;
-        font-weight: 500;
-    }
-    
-    /* Info boxes */
+    /* Info box */
     .info-box {
         background: #e8f0fe;
-        padding: 20px;
+        padding: 30px;
         border-radius: 12px;
         text-align: center;
-    }
-    
-    /* Sidebar text */
-    .sidebar-text {
-        color: #1e3c72;
-        font-weight: 500;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -129,10 +96,8 @@ st.markdown("""
 @st.cache_resource
 def init_groq_client():
     """Initialize Groq client with proper error handling"""
-    # Try environment variable first (Render, etc.)
     api_key = os.getenv("GROQ_API_KEY")
     
-    # If not found, try Streamlit secrets
     if not api_key:
         try:
             api_key = st.secrets.get("GROQ_API_KEY")
@@ -143,11 +108,9 @@ def init_groq_client():
         st.error("""
         ❌ **GROQ_API_KEY Not Found!**
         
-        Please add your Groq API key:
-        - **Render:** Environment variable `GROQ_API_KEY`
-        - **Local:** Create `.env` file with `GROQ_API_KEY=your-key`
-        
-        Get your free API key: https://console.groq.com
+        Please add your Groq API key in Render:
+        - Go to Environment tab
+        - Add: `GROQ_API_KEY` = your-key
         """)
         st.stop()
     
@@ -155,7 +118,6 @@ def init_groq_client():
 
 # ========== PDF TEXT EXTRACTION ==========
 def extract_text_from_pdf(pdf_file) -> str:
-    """Extract text from uploaded PDF"""
     try:
         pdf_reader = PyPDF2.PdfReader(pdf_file)
         text = ""
@@ -163,17 +125,17 @@ def extract_text_from_pdf(pdf_file) -> str:
             extracted = page.extract_text()
             if extracted:
                 text += extracted + "\n"
-        return text if text else "No text could be extracted from PDF."
+        return text if text else "No text could be extracted."
     except Exception as e:
         st.error(f"❌ PDF Read Error: {str(e)}")
         return ""
 
 # ========== MCQ QUESTION GENERATION ==========
 def generate_mcq_questions(client: Groq, content: str, num_questions: int, topic: str = None) -> List[Dict]:
-    """Generate MCQs using Groq API - Updated with working model"""
+    """Generate MCQs using Groq API - Using WORKING MODEL"""
     
-    # Using llama3-70b which is currently available (updated from deprecated mixtral)
-    model_name = "llama3-70b-8192"  # New working model
+    # ✅ CURRENTLY WORKING GROQ MODELS (April 2026)
+    MODEL = "llama-3.3-70b-versatile"  # Best quality, fully working
     
     prompt = f"""
     Generate {num_questions} multiple-choice questions.
@@ -181,9 +143,9 @@ def generate_mcq_questions(client: Groq, content: str, num_questions: int, topic
     {"Topic: " + topic if topic else "Based on this content:"}
     
     Content:
-    {content[:7000]}
+    {content[:6000]}
     
-    Return ONLY valid JSON in this exact format:
+    Return ONLY valid JSON. No other text. Format:
     {{
         "questions": [
             {{
@@ -196,15 +158,14 @@ def generate_mcq_questions(client: Groq, content: str, num_questions: int, topic
     }}
     
     Rules:
-    - Each question must have exactly 4 options
-    - Make questions challenging but fair
-    - Provide clear explanations
-    - Return ONLY valid JSON
+    - Exactly 4 options per question
+    - Clear, educational explanations
+    - Return ONLY JSON
     """
     
     try:
         completion = client.chat.completions.create(
-            model=model_name,  # Updated model
+            model=MODEL,  # Working model
             messages=[
                 {"role": "system", "content": "You are an expert exam creator. Return only valid JSON."},
                 {"role": "user", "content": prompt}
@@ -215,7 +176,7 @@ def generate_mcq_questions(client: Groq, content: str, num_questions: int, topic
         
         response_text = completion.choices[0].message.content
         
-        # Extract JSON from response
+        # Extract JSON
         json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
         if json_match:
             questions_data = json.loads(json_match.group())
@@ -230,27 +191,23 @@ def generate_mcq_questions(client: Groq, content: str, num_questions: int, topic
 def evaluate_answer(client: Groq, question: str, user_answer: str, correct_answer: str, explanation: str) -> Dict:
     """Evaluate user's answer"""
     
-    model_name = "llama3-70b-8192"  # Updated model
+    MODEL = "llama-3.1-8b-instant"  # Fast model for evaluation
     
     prompt = f"""
-    Evaluate this answer:
-    
+    Evaluate:
     Question: {question}
     User's Answer: {user_answer}
     Correct Answer: {correct_answer}
     
     Return ONLY JSON:
-    {{
-        "is_correct": true/false,
-        "feedback": "Short feedback (max 50 words)"
-    }}
+    {{"is_correct": true/false, "feedback": "Short feedback"}}
     """
     
     try:
         completion = client.chat.completions.create(
-            model=model_name,
+            model=MODEL,
             messages=[
-                {"role": "system", "content": "You are a strict evaluator. Return only valid JSON."},
+                {"role": "system", "content": "Return only valid JSON."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.3,
@@ -264,7 +221,7 @@ def evaluate_answer(client: Groq, question: str, user_answer: str, correct_answe
         return {"is_correct": False, "feedback": "Evaluation failed"}
         
     except Exception as e:
-        return {"is_correct": False, "feedback": f"Error: {str(e)}"}
+        return {"is_correct": False, "feedback": f"Error"}
 
 # ========== MAIN APP ==========
 def main():
@@ -278,7 +235,7 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # Session state initialization
+    # Session state
     if 'questions' not in st.session_state:
         st.session_state.questions = []
     if 'current_question' not in st.session_state:
@@ -295,36 +252,32 @@ def main():
         st.markdown("### ⚙️ **Configuration**")
         st.markdown("---")
         
-        # Input method
         input_method = st.radio(
             "**Select Input Method:**",
-            ["📄 Upload PDF", "✏️ Enter Topic"],
-            horizontal=False
+            ["📄 Upload PDF", "✏️ Enter Topic"]
         )
         
         num_questions = st.slider("**Number of Questions:**", 3, 20, 10)
         
         st.markdown("---")
         
-        # Content input
         if "PDF" in input_method:
             uploaded_file = st.file_uploader("**Upload PDF File**", type="pdf")
             content = None
             if uploaded_file:
-                with st.spinner("Extracting text from PDF..."):
+                with st.spinner("Extracting text..."):
                     content = extract_text_from_pdf(uploaded_file)
-                st.success("✅ PDF loaded successfully!")
+                st.success("✅ PDF loaded!")
         else:
             topic = st.text_area(
                 "**Enter Topic:**",
-                placeholder="e.g., Indian Polity, Machine Learning, World History...",
+                placeholder="e.g., Indian Polity, Machine Learning...",
                 height=100
             )
             content = topic if topic else None
         
         st.markdown("---")
         
-        # Generate button
         if st.button("🚀 **Generate Test**", use_container_width=True):
             if content:
                 with st.spinner(f"Generating {num_questions} questions..."):
@@ -343,11 +296,11 @@ def main():
                         st.success(f"✅ {len(questions)} questions generated!")
                         st.rerun()
                     else:
-                        st.error("❌ Failed to generate questions. Please try again.")
+                        st.error("❌ Failed to generate. Please try again.")
             else:
-                st.warning("⚠️ Please provide PDF or topic first!")
+                st.warning("⚠️ Please provide PDF or topic!")
         
-        # Progress tracker
+        # Progress
         if st.session_state.test_started and st.session_state.questions:
             st.markdown("---")
             st.markdown("### 📊 **Progress**")
@@ -358,12 +311,10 @@ def main():
             
             if answered == total and st.session_state.results:
                 correct = sum(1 for r in st.session_state.results.values() if r.get('is_correct', False))
-                st.markdown("---")
                 st.markdown("### 🎯 **Score**")
-                st.metric("Correct Answers", f"{correct}/{total}")
-                st.markdown(f"**Success Rate:** {(correct/total*100):.1f}%")
+                st.metric("Correct", f"{correct}/{total}")
     
-    # Main content area
+    # Main content
     if st.session_state.test_started and st.session_state.questions:
         questions = st.session_state.questions
         current_idx = st.session_state.current_question
@@ -371,15 +322,13 @@ def main():
         if current_idx < len(questions):
             q = questions[current_idx]
             
-            # Question card
             st.markdown(f"""
             <div class="question-card">
-                <h3 style="color: #1e3c72;">📝 Question {current_idx + 1} / {len(questions)}</h3>
-                <h2 style="font-size: 1.3rem;">{q['question']}</h2>
+                <h3>📝 Question {current_idx + 1} / {len(questions)}</h3>
+                <h2 style="font-size: 1.2rem;">{q['question']}</h2>
             </div>
             """, unsafe_allow_html=True)
             
-            # Options
             options = q['options']
             user_answer = st.session_state.answers.get(current_idx, "")
             
@@ -415,65 +364,52 @@ def main():
                         st.session_state.current_question = len(questions)
                         st.rerun()
             
-            # Feedback
             if current_idx in st.session_state.results:
                 result = st.session_state.results[current_idx]
                 if result['is_correct']:
                     st.success(f"✅ Correct! {result['feedback']}")
                 else:
                     st.error(f"❌ Incorrect! {result['feedback']}")
-                    with st.expander("📖 View Correct Answer"):
-                        st.info(f"**Correct answer:** {q['correct_answer']}\n\n**Explanation:** {q['explanation']}")
+                    with st.expander("📖 View Answer"):
+                        st.info(f"**Correct:** {q['correct_answer']}\n\n**Explanation:** {q['explanation']}")
         
         else:
-            # Results screen
             st.balloons()
-            st.markdown("""
-            <div style="text-align: center; padding: 30px;">
-                <h1 style="color: #1e3c72;">🎉 Test Completed!</h1>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Detailed results
             correct_count = 0
             for i, q in enumerate(questions):
-                with st.expander(f"Question {i+1}: {q['question'][:100]}..."):
+                with st.expander(f"Question {i+1}"):
                     st.write(f"**Your answer:** {st.session_state.answers.get(i, 'Not answered')}")
-                    st.write(f"**Correct answer:** {q['correct_answer']}")
+                    st.write(f"**Correct:** {q['correct_answer']}")
                     if i in st.session_state.results:
-                        result = st.session_state.results[i]
-                        if result['is_correct']:
-                            st.success(result['feedback'])
+                        if st.session_state.results[i]['is_correct']:
                             correct_count += 1
+                            st.success(st.session_state.results[i]['feedback'])
                         else:
-                            st.error(result['feedback'])
+                            st.error(st.session_state.results[i]['feedback'])
                     st.write(f"**Explanation:** {q['explanation']}")
             
-            # Score summary
             st.markdown("---")
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("📝 Total Questions", len(questions))
+                st.metric("📝 Total", len(questions))
             with col2:
                 st.metric("✅ Correct", correct_count)
             with col3:
-                st.metric("📊 Success Rate", f"{(correct_count/len(questions)*100):.1f}%")
+                st.metric("📊 Score", f"{(correct_count/len(questions)*100):.1f}%")
             
-            if st.button("🔄 Start New Test", type="primary", use_container_width=True):
+            if st.button("🔄 Start New Test", use_container_width=True):
                 for key in ['questions', 'current_question', 'answers', 'results', 'test_started']:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
     
     else:
-        # Welcome screen
         st.markdown("""
         <div class="info-box">
             <h2 style="color: #1e3c72;">⚡ Ready for Test?</h2>
-            <p>Upload your PDF or enter a topic in the sidebar<br>
-            Then click Generate Test to start!</p>
+            <p>Upload PDF or enter topic in the sidebar → Click Generate Test</p>
             <hr>
-            <p><strong>Features:</strong> 📄 PDF Upload | ✏️ Topic Input | ⚡ Instant Evaluation | 📊 Score Tracking</p>
+            <p><strong>Features:</strong> 📄 PDF Upload | ✏️ Topic Input | ⚡ Instant Evaluation</p>
         </div>
         """, unsafe_allow_html=True)
 
