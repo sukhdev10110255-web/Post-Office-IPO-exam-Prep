@@ -4,30 +4,46 @@ import PyPDF2
 from groq import Groq
 
 # ================= CONFIG =================
-st.set_page_config(page_title="📘 IPO EXAM AI", layout="wide")
+st.set_page_config(page_title="📘 IPO AI COACH", layout="wide")
 
-# ================= LIGHT UI =================
+# ================= PREMIUM LIGHT UI =================
 st.markdown("""
 <style>
 .stApp {
-    background: linear-gradient(135deg,#f5f7fa,#e4ecf7);
-    color:#1e293b;
+    background: linear-gradient(135deg,#eef2f7,#dbeafe);
 }
-h1,h2,h3 {
-    color:#1e3a8a;
-}
-.stButton button {
+
+/* Chat bubbles */
+.chat-user {
     background:#2563eb;
     color:white;
-    border-radius:10px;
-    padding:10px;
+    padding:10px 15px;
+    border-radius:15px;
+    margin:5px;
+    text-align:right;
 }
+.chat-ai {
+    background:white;
+    padding:10px 15px;
+    border-radius:15px;
+    margin:5px;
+    box-shadow:0 2px 6px rgba(0,0,0,0.1);
+}
+
+/* Cards */
 .card {
     background:white;
     padding:20px;
     border-radius:12px;
     margin:10px 0;
     box-shadow:0 4px 10px rgba(0,0,0,0.08);
+}
+
+/* Buttons */
+.stButton button {
+    background:#2563eb;
+    color:white;
+    border-radius:8px;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -37,7 +53,7 @@ h1,h2,h3 {
 def client():
     key = os.getenv("GROQ_API_KEY")
     if not key:
-        st.error("Add GROQ_API_KEY in Render")
+        st.error("Add GROQ_API_KEY")
         st.stop()
     return Groq(api_key=key)
 
@@ -62,15 +78,15 @@ def read_pdf(file):
 defaults = {
     "quiz":[], "index":0, "score":0,
     "start_time":None, "weak_topics":[],
-    "daily_plan":""
+    "study_content":"", "chat":[]
 }
 for k,v in defaults.items():
     if k not in st.session_state:
         st.session_state[k]=v
 
 # ================= HEADER =================
-st.title("📘 IPO 2026 AI MASTER PREP SYSTEM")
-st.markdown("📚 Notes | 🧠 MCQ | 📝 Exam | 📊 PYQ | 🎯 Weak AI | 📅 Planner")
+st.title("📘 IPO 2026 AI COACH (ChatGPT Style)")
+st.markdown("📚 Study | 💬 Chat | 🧠 MCQ | 📝 Exam | 🎯 Weak AI")
 
 # ================= INPUT =================
 col1,col2 = st.columns(2)
@@ -87,42 +103,71 @@ if pdf:
 elif topic:
     content=topic
 
-# ================= SETTINGS =================
-c1,c2,c3 = st.columns(3)
-with c1:
-    num_q = st.slider("Questions",5,30,10)
-with c2:
-    lang = st.selectbox("Language",["English","Hindi","Bilingual"])
-with c3:
-    timer_min = st.slider("Timer (min)",1,60,10)
-
-negative = st.checkbox("Negative Marking (-0.25)")
-
 # ================= MODE =================
 mode = st.selectbox("Select Mode",[
-    "📖 Notes",
+    "📖 Study + Chat",
     "🧠 MCQ Practice",
     "📝 Exam Simulator",
-    "📊 PYQ Analyzer",
-    "📅 Daily Plan",
-    "🎯 Weak Topic Trainer"
+    "🎯 Weak Topics"
 ])
 
-# ================= NOTES =================
-if mode=="📖 Notes":
+# ================= STUDY + CHAT =================
+if mode=="📖 Study + Chat":
+
     if content and st.button("Generate Notes"):
-        st.write(ask(f"Explain in {lang}:\n{content}"))
+        notes = ask(f"""
+        Create structured notes in Hindi + English.
+        {content}
+        """)
+        st.session_state.study_content = notes
+
+    # SHOW NOTES
+    if st.session_state.study_content:
+        st.markdown("### 📖 Notes")
+        st.markdown(f"<div class='card'>{st.session_state.study_content}</div>", unsafe_allow_html=True)
+
+    # CHAT UI
+    st.markdown("## 💬 Ask Doubts")
+
+    user_input = st.text_input("Type your question...")
+
+    if st.button("Send") and user_input:
+        st.session_state.chat.append(("user", user_input))
+
+        # typing animation
+        placeholder = st.empty()
+        placeholder.markdown("🤖 Typing...")
+
+        reply = ask(f"""
+        Context:
+        {st.session_state.study_content}
+
+        Question:
+        {user_input}
+
+        Answer in Hindi + English
+        """)
+
+        placeholder.empty()
+        st.session_state.chat.append(("ai", reply))
+
+    # DISPLAY CHAT
+    for role,msg in st.session_state.chat:
+        if role=="user":
+            st.markdown(f"<div class='chat-user'>{msg}</div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<div class='chat-ai'>{msg}</div>", unsafe_allow_html=True)
 
 # ================= MCQ =================
 if mode=="🧠 MCQ Practice":
     if content and st.button("Generate MCQ"):
-        st.write(ask(f"Generate {num_q} MCQ in {lang} JSON:\n{content}"))
+        st.write(ask(f"Generate MCQ Hindi+English JSON:\n{content}"))
 
 # ================= EXAM =================
 if mode=="📝 Exam Simulator":
 
     if st.button("Start Exam"):
-        raw=ask(f"Generate {num_q} MCQ JSON IPO exam {lang}")
+        raw=ask("Generate 10 MCQ JSON IPO exam")
         try:
             data=json.loads(re.search(r'\{.*\}',raw,re.DOTALL).group())
             st.session_state.quiz=data["questions"]
@@ -130,28 +175,20 @@ if mode=="📝 Exam Simulator":
             st.session_state.score=0
             st.session_state.start_time=time.time()
         except:
-            st.error("Parsing error")
-
-    if st.session_state.start_time:
-        elapsed=time.time()-st.session_state.start_time
-        rem=int(timer_min*60-elapsed)
-        st.warning(f"⏱️ Time Left: {rem//60}:{rem%60}")
+            st.error("Error")
 
     if st.session_state.quiz:
         q=st.session_state.quiz[st.session_state.index]
-
-        st.markdown(f"<div class='card'><h3>Q{st.session_state.index+1}</h3>{q['question']}</div>",unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><b>Q{st.session_state.index+1}</b><br>{q['question']}</div>",unsafe_allow_html=True)
 
         ans=st.radio("Select",q["options"])
 
         if st.button("Submit"):
             if ans==q["correct_answer"]:
                 st.session_state.score+=1
-                st.success("Correct ✅")
+                st.success("Correct")
             else:
-                if negative:
-                    st.session_state.score-=0.25
-                st.error(f"Wrong ❌ | {q['correct_answer']}")
+                st.error(f"Wrong | {q['correct_answer']}")
 
                 topic_name=ask(f"Topic: {q['question']}")
                 st.session_state.weak_topics.append(topic_name)
@@ -160,44 +197,20 @@ if mode=="📝 Exam Simulator":
             if st.session_state.index < len(st.session_state.quiz)-1:
                 st.session_state.index+=1
             else:
-                st.success("Exam Finished")
+                st.success("Finished")
 
-    if st.session_state.quiz and st.session_state.index==len(st.session_state.quiz)-1:
+    if st.session_state.quiz:
         st.metric("Score",st.session_state.score)
 
-# ================= PYQ =================
-if mode=="📊 PYQ Analyzer":
-    if st.button("Analyze"):
-        st.write(ask("Analyze IPO exam last 10 years PYQ trends"))
-
-# ================= DAILY PLAN =================
-if mode=="📅 Daily Plan":
-    if st.button("Generate Plan"):
-        plan=ask("Create daily IPO exam study plan")
-        st.session_state.daily_plan=plan
-        st.write(plan)
-
+# ================= WEAK =================
+if mode=="🎯 Weak Topics":
     if st.session_state.weak_topics:
-        st.warning("⚠️ Revise your weak topics today!")
-
-# ================= WEAK TRAINER =================
-if mode=="🎯 Weak Topic Trainer":
-    if st.session_state.weak_topics:
-        topics=list(set(st.session_state.weak_topics))
-        for t in topics:
+        for t in set(st.session_state.weak_topics):
             with st.expander(f"⚠️ {t}"):
-
-                if st.button(f"📖 Learn {t}"):
-                    st.write(ask(f"Teach {t} Hindi + English"))
-
-                if st.button(f"🧠 Practice {t}"):
-                    st.write(ask(f"Give MCQ on {t}"))
-
-                if st.button(f"🔁 Revise {t}"):
-                    st.write(ask(f"Quick revision {t}"))
+                st.write(ask(f"Teach {t} Hindi + English"))
     else:
         st.info("No weak topics yet")
 
 # ================= FOOTER =================
 st.markdown("---")
-st.caption("📘 IPO 2026 AI Prep System | Light UI Version")
+st.caption("🚀 IPO AI Coach | ChatGPT Style UI")
