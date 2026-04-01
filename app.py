@@ -7,13 +7,14 @@ from datetime import datetime
 from cerebras.cloud.sdk import Cerebras
 
 # ================= CONFIG =================
-st.set_page_config(page_title="LDCE AI Prep PRO", layout="wide")
+st.set_page_config(page_title="LDCE Prep AI PRO", layout="wide")
 
 # ================= CSS =================
 st.markdown("""
 <style>
 .stApp { background:#f5f7fa; }
 .block { background:white; padding:15px; border-radius:12px; margin-bottom:10px; }
+.question-card { background:white; padding:15px; border-left:4px solid #1e3c72; border-radius:10px; margin-bottom:10px; }
 .chat-user { background:#d1e7ff; padding:10px; border-radius:10px; margin:5px; }
 .chat-ai { background:#e2e2e2; padding:10px; border-radius:10px; margin:5px; }
 </style>
@@ -23,7 +24,7 @@ st.markdown("""
 def get_client():
     key = os.getenv("CEREBRAS_API_KEY")
     if not key:
-        st.error("API Key missing")
+        st.error("❌ Add CEREBRAS_API_KEY in Render")
         st.stop()
     return Cerebras(api_key=key)
 
@@ -33,13 +34,13 @@ def extract_pdf(file):
     text = ""
     for p in reader.pages:
         text += p.extract_text() or ""
-    return text[:30000]  # limit safe
+    return text[:20000]
 
-# ================= AI CALL =================
+# ================= AI =================
 def ask_ai(client, prompt):
     try:
         res = client.chat.completions.create(
-            model="llama3.1-8b",   # ✅ FIXED MODEL
+            model="llama3.1-8b",
             messages=[{"role":"user","content":prompt}],
             max_tokens=1500
         )
@@ -47,14 +48,28 @@ def ask_ai(client, prompt):
     except Exception as e:
         return f"❌ AI Error: {str(e)}"
 
+# ================= JSON FIX =================
+def extract_json(text):
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except:
+            return None
+    return None
+
 # ================= SESSION =================
 if "chat" not in st.session_state:
     st.session_state.chat = []
+if "questions" not in st.session_state:
+    st.session_state.questions = []
+if "score" not in st.session_state:
+    st.session_state.score = 0
 if "weak" not in st.session_state:
     st.session_state.weak = {}
 
 # ================= UI =================
-st.title("🚀 LDCE Inspector Prep AI (V6 PRO)")
+st.title("🚀 LDCE Inspector Prep AI (PRO)")
 
 col1, col2 = st.columns(2)
 
@@ -72,39 +87,67 @@ client = get_client()
 # ================= BUTTONS =================
 colA, colB, colC, colD = st.columns(4)
 
-# ---------- NOTES ----------
+# NOTES
 if colA.button("📘 Notes"):
     if content:
-        notes = ask_ai(client, f"Create bilingual notes (Hindi + English): {content}")
+        notes = ask_ai(client, f"Create structured bilingual notes (Hindi + English): {content}")
         st.markdown("### 📘 Notes")
         st.write(notes)
 
-# ---------- MCQ ----------
-if colB.button("📝 MCQ"):
+# MCQ GENERATE
+if colB.button("📝 Generate MCQ"):
     if content:
         res = ask_ai(client, f"""
         Generate 5 MCQs in JSON:
         {content}
         """)
-        st.write(res)
+        data = extract_json(res)
+        if data:
+            st.session_state.questions = data.get("questions", [])
+        else:
+            st.error("MCQ parsing error")
 
-# ---------- STUDY PLAN ----------
+# STUDY PLAN
 if colC.button("📅 Study Plan"):
-    plan = ask_ai(client, "Create 7 day LDCE study plan")
+    plan = ask_ai(client, "Create 7 day study plan for LDCE exam")
     st.write(plan)
 
-# ---------- WEAK ANALYSIS ----------
+# WEAK TOPICS
 if colD.button("📊 Weak Topics"):
     st.write(st.session_state.weak)
 
-# ================= CHAT =================
-st.markdown("## 💬 AI Discussion")
+# ================= MCQ PRACTICE =================
+st.markdown("## 📝 MCQ Practice")
 
-user_input = st.text_input("Ask anything")
+for i, q in enumerate(st.session_state.questions):
+
+    st.markdown(f"<div class='question-card'><b>Q{i+1}:</b> {q['question']}</div>", unsafe_allow_html=True)
+
+    selected = st.radio("Choose answer:", q["options"], key=f"q_{i}")
+
+    if st.button(f"Check Answer {i+1}", key=f"btn_{i}"):
+
+        if selected == q["correct_answer"]:
+            st.success("✅ Correct")
+            st.session_state.score += 1
+        else:
+            st.error("❌ Wrong")
+            st.session_state.weak[q["question"]] = st.session_state.weak.get(q["question"], 0) + 1
+
+        with st.expander("Explanation"):
+            st.write("Correct:", q["correct_answer"])
+            st.write(q["explanation"])
+
+    st.markdown("---")
+
+# ================= CHAT =================
+st.markdown("## 💬 AI Chat")
+
+user_input = st.text_input("Ask anything about topic")
 
 if user_input:
     st.session_state.chat.append(("user", user_input))
-    reply = ask_ai(client, f"{content}\n\nUser question: {user_input}")
+    reply = ask_ai(client, f"{content}\nUser question: {user_input}")
     st.session_state.chat.append(("ai", reply))
 
 for role, msg in st.session_state.chat:
@@ -117,22 +160,10 @@ for role, msg in st.session_state.chat:
 st.markdown("## 🎯 Mock Test")
 
 if st.button("Start Test"):
-    questions = ask_ai(client, f"Generate 5 MCQ JSON with answers: {content}")
-    st.session_state.test = questions
     st.session_state.score = 0
-    st.session_state.q = 0
     st.session_state.start = datetime.now()
 
-if "test" in st.session_state:
-    st.write(st.session_state.test)
-
-    # Timer
+if "start" in st.session_state:
     elapsed = (datetime.now() - st.session_state.start).seconds
     st.write(f"⏱ Time: {elapsed}s")
-
-    # Example scoring
-    if st.button("Submit Dummy Answer"):
-        st.session_state.score += 1
-        st.session_state.weak["topic"] = st.session_state.weak.get("topic", 0) + 1
-
-    st.write("Score:", st.session_state.score)
+    st.write(f"🎯 Score: {st.session_state.score}")
