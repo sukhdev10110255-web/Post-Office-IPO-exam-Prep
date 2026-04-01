@@ -3,132 +3,60 @@ import os
 import PyPDF2
 import json
 import re
+from datetime import datetime
+from cerebras.cloud.sdk import Cerebras
 
-# ========== PAGE CONFIG ==========
-st.set_page_config(page_title="📚 LDCE AI Prep V5", layout="wide")
+# ================= CONFIG =================
+st.set_page_config(page_title="LDCE AI Prep PRO", layout="wide")
 
-st.write("🚀 System Running")
-
-# ========== STYLE ==========
+# ================= CSS =================
 st.markdown("""
 <style>
 .stApp { background:#f5f7fa; }
-h1 { color:#1e3c72; }
-.stButton button { background:#1e3c72; color:white; border-radius:8px; }
-.question-card { background:white;padding:15px;border-radius:10px;border-left:4px solid #1e3c72; }
+.block { background:white; padding:15px; border-radius:12px; margin-bottom:10px; }
+.chat-user { background:#d1e7ff; padding:10px; border-radius:10px; margin:5px; }
+.chat-ai { background:#e2e2e2; padding:10px; border-radius:10px; margin:5px; }
 </style>
 """, unsafe_allow_html=True)
 
-# ========== CLIENT ==========
+# ================= API =================
 def get_client():
-    api_key = os.getenv("CEREBRAS_API_KEY")
-    if not api_key:
-        st.error("❌ API key missing")
-        return None
-    
-    try:
-        from cerebras.cloud.sdk import Cerebras
-        return Cerebras(api_key=api_key)
-    except Exception as e:
-        st.error(e)
-        return None
+    key = os.getenv("CEREBRAS_API_KEY")
+    if not key:
+        st.error("API Key missing")
+        st.stop()
+    return Cerebras(api_key=key)
 
-# ========== SAFE MODEL CALL ==========
-def safe_chat(client, prompt, max_tokens=1000):
-    models = ["llama3.1-70b", "llama3.1-8b"]  # auto fallback
-
-    for model in models:
-        try:
-            res = client.chat.completions.create(
-                model=model,
-                messages=[{"role":"user","content":prompt}],
-                max_tokens=max_tokens,
-                temperature=0.7
-            )
-            return res.choices[0].message.content
-        except Exception as e:
-            continue
-
-    return "❌ All models failed"
-
-# ========== PDF ==========
+# ================= PDF =================
 def extract_pdf(file):
+    reader = PyPDF2.PdfReader(file)
     text = ""
-    pdf = PyPDF2.PdfReader(file)
-    for p in pdf.pages:
-        t = p.extract_text()
-        if t:
-            text += t
-    return text
+    for p in reader.pages:
+        text += p.extract_text() or ""
+    return text[:30000]  # limit safe
 
-# ========== CHUNK ==========
-def split_text(text, size=3000):
-    return [text[i:i+size] for i in range(0, len(text), size)]
+# ================= AI CALL =================
+def ask_ai(client, prompt):
+    res = client.chat.completions.create(
+        model="llama3-70b-8192",
+        messages=[{"role":"user","content":prompt}],
+        max_tokens=2000
+    )
+    return res.choices[0].message.content
 
-# ========== NOTES ==========
-def generate_notes(client, content):
-    chunks = split_text(content)
-    final_notes = ""
+# ================= SESSION =================
+if "chat" not in st.session_state:
+    st.session_state.chat = []
+if "weak" not in st.session_state:
+    st.session_state.weak = {}
 
-    for chunk in chunks[:5]:  # limit for safety
-        prompt = f"""
-        Create exam-focused notes in Hindi + English:
-
-        {chunk}
-        """
-        final_notes += safe_chat(client, prompt, 800) + "\n\n"
-
-    return final_notes
-
-# ========== MCQ ==========
-def generate_mcq(client, content, n=5):
-    content = content[:8000]
-
-    prompt = f"""
-    Generate {n} MCQs.
-
-    Content:
-    {content}
-
-    JSON format:
-    {{
-        "questions":[
-            {{
-                "question":"",
-                "options":["A","B","C","D"],
-                "correct_answer":"",
-                "explanation":""
-            }}
-        ]
-    }}
-    """
-
-    txt = safe_chat(client, prompt, 2000)
-
-    try:
-        data = json.loads(re.search(r'\{.*\}', txt, re.DOTALL).group())
-        return data["questions"]
-    except:
-        return []
-
-# ========== SESSION ==========
-if "questions" not in st.session_state:
-    st.session_state.questions = []
-if "notes" not in st.session_state:
-    st.session_state.notes = ""
-if "index" not in st.session_state:
-    st.session_state.index = 0
-
-# ========== UI ==========
-st.title("📚 LDCE Inspector Prep AI (V5 PRO)")
+# ================= UI =================
+st.title("🚀 LDCE Inspector Prep AI (V6 PRO)")
 
 col1, col2 = st.columns(2)
 
-with col1:
-    topic = st.text_area("Enter Topic")
-
-with col2:
-    pdf = st.file_uploader("Upload PDF", type="pdf")
+topic = col1.text_area("Enter Topic")
+pdf = col2.file_uploader("Upload PDF")
 
 content = ""
 if pdf:
@@ -138,48 +66,70 @@ elif topic:
 
 client = get_client()
 
-# ========== BUTTONS ==========
-col1, col2 = st.columns(2)
+# ================= BUTTONS =================
+colA, colB, colC, colD = st.columns(4)
 
-with col1:
-    if st.button("📝 Generate Notes"):
-        if content and client:
-            with st.spinner("Generating notes..."):
-                st.session_state.notes = generate_notes(client, content)
+# ---------- NOTES ----------
+if colA.button("📘 Notes"):
+    if content:
+        notes = ask_ai(client, f"Create bilingual notes (Hindi + English): {content}")
+        st.markdown("### 📘 Notes")
+        st.write(notes)
 
-with col2:
-    if st.button("🚀 Generate MCQ"):
-        if content and client:
-            with st.spinner("Generating MCQ..."):
-                st.session_state.questions = generate_mcq(client, content)
+# ---------- MCQ ----------
+if colB.button("📝 MCQ"):
+    if content:
+        res = ask_ai(client, f"""
+        Generate 5 MCQs in JSON:
+        {content}
+        """)
+        st.write(res)
 
-# ========== NOTES ==========
-if st.session_state.notes:
-    st.subheader("📖 Notes")
-    st.write(st.session_state.notes)
+# ---------- STUDY PLAN ----------
+if colC.button("📅 Study Plan"):
+    plan = ask_ai(client, "Create 7 day LDCE study plan")
+    st.write(plan)
 
-# ========== MCQ ==========
-if st.session_state.questions:
-    st.subheader("📝 Mock Test")
+# ---------- WEAK ANALYSIS ----------
+if colD.button("📊 Weak Topics"):
+    st.write(st.session_state.weak)
 
-    q = st.session_state.questions[st.session_state.index]
+# ================= CHAT =================
+st.markdown("## 💬 AI Discussion")
 
-    st.markdown(f"""
-    <div class="question-card">
-    <b>Q{st.session_state.index+1}:</b> {q['question']}
-    </div>
-    """, unsafe_allow_html=True)
+user_input = st.text_input("Ask anything")
 
-    ans = st.radio("Choose answer", q["options"])
+if user_input:
+    st.session_state.chat.append(("user", user_input))
+    reply = ask_ai(client, f"{content}\n\nUser question: {user_input}")
+    st.session_state.chat.append(("ai", reply))
 
-    if st.button("Submit"):
-        if ans == q["correct_answer"]:
-            st.success("✅ Correct")
-        else:
-            st.error("❌ Wrong")
-            st.write("Correct:", q["correct_answer"])
-            st.write(q["explanation"])
+for role, msg in st.session_state.chat:
+    if role == "user":
+        st.markdown(f"<div class='chat-user'>{msg}</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<div class='chat-ai'>{msg}</div>", unsafe_allow_html=True)
 
-    if st.button("Next"):
-        if st.session_state.index < len(st.session_state.questions)-1:
-            st.session_state.index += 1
+# ================= MOCK TEST =================
+st.markdown("## 🎯 Mock Test")
+
+if st.button("Start Test"):
+    questions = ask_ai(client, f"Generate 5 MCQ JSON with answers: {content}")
+    st.session_state.test = questions
+    st.session_state.score = 0
+    st.session_state.q = 0
+    st.session_state.start = datetime.now()
+
+if "test" in st.session_state:
+    st.write(st.session_state.test)
+
+    # Timer
+    elapsed = (datetime.now() - st.session_state.start).seconds
+    st.write(f"⏱ Time: {elapsed}s")
+
+    # Example scoring
+    if st.button("Submit Dummy Answer"):
+        st.session_state.score += 1
+        st.session_state.weak["topic"] = st.session_state.weak.get("topic", 0) + 1
+
+    st.write("Score:", st.session_state.score)
