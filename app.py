@@ -5,37 +5,51 @@ import json
 import re
 
 # ========== PAGE CONFIG ==========
-st.set_page_config(
-    page_title="📚 LDCE Prep AI",
-    layout="wide"
-)
+st.set_page_config(page_title="📚 LDCE AI Prep V5", layout="wide")
 
-st.write("🚀 App Started Successfully")
+st.write("🚀 System Running")
 
-# ========== CSS ==========
+# ========== STYLE ==========
 st.markdown("""
 <style>
-.stApp { background: #f5f7fa; }
-h1 { color: #1e3c72; }
-.stButton button { background: #1e3c72; color: white; }
+.stApp { background:#f5f7fa; }
+h1 { color:#1e3c72; }
+.stButton button { background:#1e3c72; color:white; border-radius:8px; }
 .question-card { background:white;padding:15px;border-radius:10px;border-left:4px solid #1e3c72; }
 </style>
 """, unsafe_allow_html=True)
 
-# ========== SAFE IMPORT ==========
+# ========== CLIENT ==========
 def get_client():
     api_key = os.getenv("CEREBRAS_API_KEY")
-
     if not api_key:
         st.error("❌ API key missing")
         return None
-
+    
     try:
         from cerebras.cloud.sdk import Cerebras
         return Cerebras(api_key=api_key)
     except Exception as e:
-        st.error(f"❌ SDK error: {e}")
+        st.error(e)
         return None
+
+# ========== SAFE MODEL CALL ==========
+def safe_chat(client, prompt, max_tokens=1000):
+    models = ["llama3.1-70b", "llama3.1-8b"]  # auto fallback
+
+    for model in models:
+        try:
+            res = client.chat.completions.create(
+                model=model,
+                messages=[{"role":"user","content":prompt}],
+                max_tokens=max_tokens,
+                temperature=0.7
+            )
+            return res.choices[0].message.content
+        except Exception as e:
+            continue
+
+    return "❌ All models failed"
 
 # ========== PDF ==========
 def extract_pdf(file):
@@ -54,26 +68,17 @@ def split_text(text, size=3000):
 # ========== NOTES ==========
 def generate_notes(client, content):
     chunks = split_text(content)
+    final_notes = ""
 
-    notes = ""
-    for chunk in chunks[:5]:  # limit chunks for safety
+    for chunk in chunks[:5]:  # limit for safety
         prompt = f"""
-        Create SHORT study notes in Hindi + English:
+        Create exam-focused notes in Hindi + English:
 
         {chunk}
         """
+        final_notes += safe_chat(client, prompt, 800) + "\n\n"
 
-        try:
-            res = client.chat.completions.create(
-                model="llama-3.3-70b",
-                messages=[{"role":"user","content":prompt}],
-                max_tokens=800
-            )
-            notes += res.choices[0].message.content + "\n\n"
-        except:
-            continue
-
-    return notes
+    return final_notes
 
 # ========== MCQ ==========
 def generate_mcq(client, content, n=5):
@@ -98,19 +103,12 @@ def generate_mcq(client, content, n=5):
     }}
     """
 
-    try:
-        res = client.chat.completions.create(
-            model="llama-3.3-70b",
-            messages=[{"role":"user","content":prompt}],
-            max_tokens=2000
-        )
+    txt = safe_chat(client, prompt, 2000)
 
-        txt = res.choices[0].message.content
+    try:
         data = json.loads(re.search(r'\{.*\}', txt, re.DOTALL).group())
         return data["questions"]
-
-    except Exception as e:
-        st.error(e)
+    except:
         return []
 
 # ========== SESSION ==========
@@ -122,7 +120,7 @@ if "index" not in st.session_state:
     st.session_state.index = 0
 
 # ========== UI ==========
-st.title("📚 LDCE AI Prep System")
+st.title("📚 LDCE Inspector Prep AI (V5 PRO)")
 
 col1, col2 = st.columns(2)
 
@@ -133,7 +131,6 @@ with col2:
     pdf = st.file_uploader("Upload PDF", type="pdf")
 
 content = ""
-
 if pdf:
     content = extract_pdf(pdf)
 elif topic:
@@ -147,13 +144,13 @@ col1, col2 = st.columns(2)
 with col1:
     if st.button("📝 Generate Notes"):
         if content and client:
-            with st.spinner("Generating..."):
+            with st.spinner("Generating notes..."):
                 st.session_state.notes = generate_notes(client, content)
 
 with col2:
     if st.button("🚀 Generate MCQ"):
         if content and client:
-            with st.spinner("Generating..."):
+            with st.spinner("Generating MCQ..."):
                 st.session_state.questions = generate_mcq(client, content)
 
 # ========== NOTES ==========
@@ -163,7 +160,7 @@ if st.session_state.notes:
 
 # ========== MCQ ==========
 if st.session_state.questions:
-    st.subheader("📝 Test")
+    st.subheader("📝 Mock Test")
 
     q = st.session_state.questions[st.session_state.index]
 
@@ -173,7 +170,7 @@ if st.session_state.questions:
     </div>
     """, unsafe_allow_html=True)
 
-    ans = st.radio("Choose", q["options"])
+    ans = st.radio("Choose answer", q["options"])
 
     if st.button("Submit"):
         if ans == q["correct_answer"]:
