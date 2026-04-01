@@ -5,148 +5,134 @@ from groq import Groq
 import json
 import re
 from typing import List, Dict
-import time
 
 # ========== PAGE CONFIGURATION ==========
 st.set_page_config(
-    page_title="⚡ EXAM WARRIOR | AI Test Generator",
-    page_icon="⚔️",
+    page_title="📚 Exam Warrior | AI Test Generator",
+    page_icon="📝",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# ========== CUSTOM CSS FOR AGGRESSIVE DARK THEME ==========
+# ========== LIGHT THEME CSS ==========
 st.markdown("""
 <style>
-    /* Main container styling */
+    /* Main container - Light background */
     .stApp {
-        background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+        background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
     }
     
-    /* Headers with aggressive styling */
+    /* Headers styling */
     h1, h2, h3 {
-        font-family: 'Impact', 'Arial Black', sans-serif;
-        text-transform: uppercase;
-        letter-spacing: 2px;
+        font-family: 'Poppins', 'Segoe UI', sans-serif;
+        color: #1e3c72;
     }
     
     h1 {
-        background: linear-gradient(135deg, #ff0000, #ff6600);
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0 0 20px rgba(255,0,0,0.5);
-        font-size: 3.5rem;
-        border-left: 5px solid #ff0000;
+        font-size: 2.8rem;
+        border-left: 5px solid #1e3c72;
         padding-left: 20px;
     }
     
-    /* Sidebar styling */
+    /* Sidebar styling - Light */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0f0f0f 0%, #1a1a2a 100%);
-        border-right: 2px solid #ff3300;
+        background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+        border-right: 1px solid #e0e0e0;
+        box-shadow: 2px 0 10px rgba(0,0,0,0.05);
     }
     
-    /* Button styling - AGGRESSIVE */
+    /* Button styling */
     .stButton button {
-        background: linear-gradient(90deg, #ff0000, #ff3300);
+        background: linear-gradient(90deg, #1e3c72, #2a5298);
         color: white;
-        font-weight: bold;
-        font-size: 18px;
+        font-weight: 600;
+        font-size: 16px;
         border: none;
-        border-radius: 10px;
-        padding: 12px 24px;
+        border-radius: 8px;
+        padding: 10px 24px;
         transition: all 0.3s ease;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        box-shadow: 0 0 15px rgba(255,0,0,0.5);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
     
     .stButton button:hover {
-        transform: scale(1.02);
-        box-shadow: 0 0 25px rgba(255,0,0,0.8);
-        background: linear-gradient(90deg, #ff3300, #ff0000);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(30,60,114,0.3);
+        background: linear-gradient(90deg, #2a5298, #1e3c72);
     }
     
-    /* Cards styling */
+    /* Card styling */
     .question-card {
-        background: rgba(0,0,0,0.7);
-        border-left: 4px solid #ff3300;
+        background: white;
+        border-left: 4px solid #1e3c72;
         border-radius: 12px;
         padding: 20px;
         margin: 15px 0;
-        box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
     }
     
-    /* Progress bar styling */
+    /* Progress bar */
     .stProgress > div > div {
-        background: linear-gradient(90deg, #ff0000, #ff6600);
+        background: linear-gradient(90deg, #1e3c72, #2a5298);
     }
     
     /* Metric cards */
     [data-testid="stMetricValue"] {
-        font-size: 2.5rem;
+        font-size: 2rem;
         font-weight: bold;
-        color: #ff3300;
+        color: #1e3c72;
     }
     
-    /* Radio buttons styling */
+    /* Radio buttons */
     .stRadio label {
-        font-size: 16px;
-        font-weight: 500;
-        padding: 10px;
+        font-size: 15px;
+        padding: 8px;
         border-radius: 8px;
         transition: all 0.2s;
     }
     
     .stRadio label:hover {
-        background: rgba(255,51,0,0.1);
+        background: rgba(30,60,114,0.05);
     }
     
     /* Success/Error messages */
     .stAlert {
-        border-left: 4px solid #ff3300;
         border-radius: 8px;
     }
     
     /* Expander styling */
     .streamlit-expanderHeader {
-        background: rgba(255,51,0,0.1);
+        background: rgba(30,60,114,0.05);
         border-radius: 8px;
-        font-weight: bold;
+        font-weight: 500;
     }
     
-    /* Custom scrollbar */
-    ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
-    ::-webkit-scrollbar-track {
-        background: #1a1a2a;
-    }
-    ::-webkit-scrollbar-thumb {
-        background: #ff3300;
-        border-radius: 4px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-        background: #ff0000;
+    /* Info boxes */
+    .info-box {
+        background: #e8f0fe;
+        padding: 20px;
+        border-radius: 12px;
+        text-align: center;
     }
     
-    /* Animated background effect */
-    @keyframes pulse {
-        0% { opacity: 0.3; }
-        100% { opacity: 0.6; }
+    /* Sidebar text */
+    .sidebar-text {
+        color: #1e3c72;
+        font-weight: 500;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ========== GROQ CLIENT INITIALIZATION (FIXED) ==========
+# ========== GROQ CLIENT INITIALIZATION ==========
 @st.cache_resource
 def init_groq_client():
     """Initialize Groq client with proper error handling"""
-    # Try environment variable first (Render, Heroku, etc.)
+    # Try environment variable first (Render, etc.)
     api_key = os.getenv("GROQ_API_KEY")
     
-    # If not found, try Streamlit secrets (Streamlit Cloud)
+    # If not found, try Streamlit secrets
     if not api_key:
         try:
             api_key = st.secrets.get("GROQ_API_KEY")
@@ -155,21 +141,13 @@ def init_groq_client():
     
     if not api_key:
         st.error("""
-        ⚔️ **GROQ_API_KEY NOT FOUND!** ⚔️
+        ❌ **GROQ_API_KEY Not Found!**
         
-        ### 🔥 To fix this:
+        Please add your Groq API key:
+        - **Render:** Environment variable `GROQ_API_KEY`
+        - **Local:** Create `.env` file with `GROQ_API_KEY=your-key`
         
-        1. **Get your API key:** [console.groq.com](https://console.groq.com)
-        2. **Add it to Render:**
-           - Go to your service → Environment tab
-           - Add variable: `GROQ_API_KEY` = `your-key-here`
-        
-        3. **Or add to Streamlit Cloud:**
-           - Settings → Secrets → Add `GROQ_API_KEY`
-        
-        ### 💪 Don't have a key? 
-        - Sign up for free at Groq.com
-        - Get 30+ requests/minute free tier
+        Get your free API key: https://console.groq.com
         """)
         st.stop()
     
@@ -192,41 +170,43 @@ def extract_text_from_pdf(pdf_file) -> str:
 
 # ========== MCQ QUESTION GENERATION ==========
 def generate_mcq_questions(client: Groq, content: str, num_questions: int, topic: str = None) -> List[Dict]:
-    """Generate MCQs using Groq API"""
+    """Generate MCQs using Groq API - Updated with working model"""
+    
+    # Using llama3-70b which is currently available (updated from deprecated mixtral)
+    model_name = "llama3-70b-8192"  # New working model
     
     prompt = f"""
-    You are a ruthless exam creator. Generate {num_questions} high-quality multiple-choice questions.
+    Generate {num_questions} multiple-choice questions.
     
     {"Topic: " + topic if topic else "Based on this content:"}
     
     Content:
     {content[:7000]}
     
-    IMPORTANT: Return ONLY valid JSON in this exact format:
+    Return ONLY valid JSON in this exact format:
     {{
         "questions": [
             {{
-                "question": "Question text here?",
+                "question": "Question text?",
                 "options": ["A. Option 1", "B. Option 2", "C. Option 3", "D. Option 4"],
                 "correct_answer": "A. Option 1",
-                "explanation": "Detailed explanation why this is correct"
+                "explanation": "Detailed explanation"
             }}
         ]
     }}
     
     Rules:
     - Each question must have exactly 4 options
-    - Make options challenging but fair
-    - Test deep understanding, not just memorization
-    - Provide clear, educational explanations
-    - Return ONLY valid JSON, no other text
+    - Make questions challenging but fair
+    - Provide clear explanations
+    - Return ONLY valid JSON
     """
     
     try:
         completion = client.chat.completions.create(
-            model="mixtral-8x7b-32768",
+            model=model_name,  # Updated model
             messages=[
-                {"role": "system", "content": "You are an expert exam creator. Generate challenging MCQs. Return only valid JSON."},
+                {"role": "system", "content": "You are an expert exam creator. Return only valid JSON."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
@@ -248,10 +228,12 @@ def generate_mcq_questions(client: Groq, content: str, num_questions: int, topic
 
 # ========== ANSWER EVALUATION ==========
 def evaluate_answer(client: Groq, question: str, user_answer: str, correct_answer: str, explanation: str) -> Dict:
-    """Evaluate user's answer with Groq"""
+    """Evaluate user's answer"""
+    
+    model_name = "llama3-70b-8192"  # Updated model
     
     prompt = f"""
-    Evaluate this answer STRICTLY:
+    Evaluate this answer:
     
     Question: {question}
     User's Answer: {user_answer}
@@ -260,13 +242,13 @@ def evaluate_answer(client: Groq, question: str, user_answer: str, correct_answe
     Return ONLY JSON:
     {{
         "is_correct": true/false,
-        "feedback": "Short, powerful feedback (max 50 words)"
+        "feedback": "Short feedback (max 50 words)"
     }}
     """
     
     try:
         completion = client.chat.completions.create(
-            model="mixtral-8x7b-32768",
+            model=model_name,
             messages=[
                 {"role": "system", "content": "You are a strict evaluator. Return only valid JSON."},
                 {"role": "user", "content": prompt}
@@ -286,12 +268,12 @@ def evaluate_answer(client: Groq, question: str, user_answer: str, correct_answe
 
 # ========== MAIN APP ==========
 def main():
-    # Animated header
+    # Header
     st.markdown("""
     <div style="text-align: center; margin-bottom: 30px;">
-        <h1>⚔️ EXAM WARRIOR ⚔️</h1>
-        <p style="color: #ff6600; font-size: 1.2rem; letter-spacing: 2px;">
-            🔥 AI-POWERED MCQ COMBAT TRAINING 🔥
+        <h1>📚 EXAM WARRIOR</h1>
+        <p style="color: #1e3c72; font-size: 1.1rem;">
+            AI-Powered MCQ Test Generator for Exam Preparation
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -308,33 +290,33 @@ def main():
     if 'test_started' not in st.session_state:
         st.session_state.test_started = False
     
-    # Sidebar - Weapon Config
+    # Sidebar
     with st.sidebar:
-        st.markdown("### ⚔️ **BATTLE CONFIG** ⚔️")
+        st.markdown("### ⚙️ **Configuration**")
         st.markdown("---")
         
         # Input method
         input_method = st.radio(
-            "**SELECT WEAPON:**",
-            ["📄 PDF ATTACK", "🎯 TOPIC STRIKE"],
+            "**Select Input Method:**",
+            ["📄 Upload PDF", "✏️ Enter Topic"],
             horizontal=False
         )
         
-        num_questions = st.slider("**QUESTIONS COUNT:**", 3, 20, 10)
+        num_questions = st.slider("**Number of Questions:**", 3, 20, 10)
         
         st.markdown("---")
         
         # Content input
         if "PDF" in input_method:
-            uploaded_file = st.file_uploader("**DEPLOY PDF**", type="pdf")
+            uploaded_file = st.file_uploader("**Upload PDF File**", type="pdf")
             content = None
             if uploaded_file:
-                with st.spinner("🔍 Extracting intel..."):
+                with st.spinner("Extracting text from PDF..."):
                     content = extract_text_from_pdf(uploaded_file)
-                st.success("✅ PDF loaded!")
+                st.success("✅ PDF loaded successfully!")
         else:
             topic = st.text_area(
-                "**TARGET TOPIC:**",
+                "**Enter Topic:**",
                 placeholder="e.g., Indian Polity, Machine Learning, World History...",
                 height=100
             )
@@ -343,13 +325,13 @@ def main():
         st.markdown("---")
         
         # Generate button
-        if st.button("💥 **GENERATE TEST** 💥", use_container_width=True):
+        if st.button("🚀 **Generate Test**", use_container_width=True):
             if content:
-                with st.spinner("⚡ Generating battle questions..."):
+                with st.spinner(f"Generating {num_questions} questions..."):
                     client = init_groq_client()
                     questions = generate_mcq_questions(
                         client, content, num_questions,
-                        topic if "TOPIC" in input_method else None
+                        topic if "Topic" in input_method else None
                     )
                     
                     if questions:
@@ -358,30 +340,30 @@ def main():
                         st.session_state.answers = {}
                         st.session_state.results = {}
                         st.session_state.test_started = True
-                        st.success(f"✅ {len(questions)} questions ready for battle!")
+                        st.success(f"✅ {len(questions)} questions generated!")
                         st.rerun()
                     else:
-                        st.error("❌ Failed to generate! Check API key or content.")
+                        st.error("❌ Failed to generate questions. Please try again.")
             else:
-                st.warning("⚠️ Deploy PDF or target topic first!")
+                st.warning("⚠️ Please provide PDF or topic first!")
         
         # Progress tracker
         if st.session_state.test_started and st.session_state.questions:
             st.markdown("---")
-            st.markdown("### 📊 **BATTLE PROGRESS**")
+            st.markdown("### 📊 **Progress**")
             answered = len([a for a in st.session_state.answers.values() if a])
             total = len(st.session_state.questions)
             st.progress(answered/total if total > 0 else 0)
-            st.metric("**ENEMIES DEFEATED**", f"{answered}/{total}")
+            st.write(f"Answered: {answered}/{total}")
             
             if answered == total and st.session_state.results:
                 correct = sum(1 for r in st.session_state.results.values() if r.get('is_correct', False))
                 st.markdown("---")
-                st.markdown("### 🏆 **FINAL SCORE**")
-                st.metric("**VICTORY RATE**", f"{(correct/total*100):.1f}%")
-                st.markdown(f"**Correct:** {correct} / {total}")
+                st.markdown("### 🎯 **Score**")
+                st.metric("Correct Answers", f"{correct}/{total}")
+                st.markdown(f"**Success Rate:** {(correct/total*100):.1f}%")
     
-    # Main battle arena
+    # Main content area
     if st.session_state.test_started and st.session_state.questions:
         questions = st.session_state.questions
         current_idx = st.session_state.current_question
@@ -392,8 +374,8 @@ def main():
             # Question card
             st.markdown(f"""
             <div class="question-card">
-                <h3 style="color: #ff6600;">⚔️ QUESTION {current_idx + 1} / {len(questions)}</h3>
-                <h2 style="font-size: 1.5rem;">{q['question']}</h2>
+                <h3 style="color: #1e3c72;">📝 Question {current_idx + 1} / {len(questions)}</h3>
+                <h2 style="font-size: 1.3rem;">{q['question']}</h2>
             </div>
             """, unsafe_allow_html=True)
             
@@ -402,7 +384,7 @@ def main():
             user_answer = st.session_state.answers.get(current_idx, "")
             
             answer = st.radio(
-                "**SELECT YOUR STRIKE:**",
+                "**Select your answer:**",
                 options,
                 index=options.index(user_answer) if user_answer in options else 0,
                 key=f"q_{current_idx}"
@@ -411,11 +393,11 @@ def main():
             col1, col2 = st.columns(2)
             
             with col1:
-                if st.button("🎯 **SUBMIT ANSWER**", use_container_width=True):
+                if st.button("✅ Submit Answer", use_container_width=True):
                     if answer:
                         st.session_state.answers[current_idx] = answer
                         client = init_groq_client()
-                        with st.spinner("⚡ Evaluating..."):
+                        with st.spinner("Evaluating..."):
                             evaluation = evaluate_answer(
                                 client, q['question'], answer,
                                 q['correct_answer'], q['explanation']
@@ -425,11 +407,11 @@ def main():
             
             with col2:
                 if current_idx < len(questions) - 1:
-                    if st.button("⏭️ **NEXT BATTLE**", use_container_width=True):
+                    if st.button("⏭️ Next Question", use_container_width=True):
                         st.session_state.current_question += 1
                         st.rerun()
                 else:
-                    if st.button("🏆 **SHOW RESULTS**", use_container_width=True):
+                    if st.button("🏆 Show Results", use_container_width=True):
                         st.session_state.current_question = len(questions)
                         st.rerun()
             
@@ -437,25 +419,25 @@ def main():
             if current_idx in st.session_state.results:
                 result = st.session_state.results[current_idx]
                 if result['is_correct']:
-                    st.success(f"✅ **VICTORY!** {result['feedback']}")
+                    st.success(f"✅ Correct! {result['feedback']}")
                 else:
-                    st.error(f"❌ **DEFEATED!** {result['feedback']}")
-                    with st.expander("📖 **REVIEW STRATEGY**"):
-                        st.info(f"**Correct Answer:** {q['correct_answer']}\n\n**Explanation:** {q['explanation']}")
+                    st.error(f"❌ Incorrect! {result['feedback']}")
+                    with st.expander("📖 View Correct Answer"):
+                        st.info(f"**Correct answer:** {q['correct_answer']}\n\n**Explanation:** {q['explanation']}")
         
         else:
             # Results screen
             st.balloons()
             st.markdown("""
-            <div style="text-align: center; padding: 40px;">
-                <h1 style="font-size: 3rem;">🏆 BATTLE COMPLETE 🏆</h1>
+            <div style="text-align: center; padding: 30px;">
+                <h1 style="color: #1e3c72;">🎉 Test Completed!</h1>
             </div>
             """, unsafe_allow_html=True)
             
             # Detailed results
             correct_count = 0
             for i, q in enumerate(questions):
-                with st.expander(f"⚔️ Question {i+1}: {q['question'][:100]}..."):
+                with st.expander(f"Question {i+1}: {q['question'][:100]}..."):
                     st.write(f"**Your answer:** {st.session_state.answers.get(i, 'Not answered')}")
                     st.write(f"**Correct answer:** {q['correct_answer']}")
                     if i in st.session_state.results:
@@ -471,13 +453,13 @@ def main():
             st.markdown("---")
             col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("⚔️ TOTAL BATTLES", len(questions))
+                st.metric("📝 Total Questions", len(questions))
             with col2:
-                st.metric("✅ VICTORIES", correct_count)
+                st.metric("✅ Correct", correct_count)
             with col3:
-                st.metric("🔥 SUCCESS RATE", f"{(correct_count/len(questions)*100):.1f}%")
+                st.metric("📊 Success Rate", f"{(correct_count/len(questions)*100):.1f}%")
             
-            if st.button("🔄 **START NEW WAR**", type="primary", use_container_width=True):
+            if st.button("🔄 Start New Test", type="primary", use_container_width=True):
                 for key in ['questions', 'current_question', 'answers', 'results', 'test_started']:
                     if key in st.session_state:
                         del st.session_state[key]
@@ -486,16 +468,12 @@ def main():
     else:
         # Welcome screen
         st.markdown("""
-        <div style="text-align: center; padding: 60px 20px;">
-            <h2 style="color: #ff6600;">⚡ READY FOR BATTLE? ⚡</h2>
-            <p style="font-size: 1.2rem; margin: 20px 0;">
-                Deploy your PDF or target a topic in the sidebar<br>
-                Then launch the test generator!
-            </p>
-            <div style="background: rgba(255,51,0,0.1); padding: 20px; border-radius: 12px; margin-top: 30px;">
-                <p>🔥 <strong>Features:</strong> 🔥</p>
-                <p>📄 PDF Combat | 🎯 Topic Warfare | ⚡ Instant Evaluation | 🏆 Score Tracking</p>
-            </div>
+        <div class="info-box">
+            <h2 style="color: #1e3c72;">⚡ Ready for Test?</h2>
+            <p>Upload your PDF or enter a topic in the sidebar<br>
+            Then click Generate Test to start!</p>
+            <hr>
+            <p><strong>Features:</strong> 📄 PDF Upload | ✏️ Topic Input | ⚡ Instant Evaluation | 📊 Score Tracking</p>
         </div>
         """, unsafe_allow_html=True)
 
