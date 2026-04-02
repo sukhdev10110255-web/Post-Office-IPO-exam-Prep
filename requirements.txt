@@ -1,4 +1,6 @@
 streamlit
-cerebras-cloud-sdk
+pandas
+plotly
 PyPDF2
-gtts
+gTTS
+cerebras-cloud-sdk
