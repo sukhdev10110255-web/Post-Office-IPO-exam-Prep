@@ -4,7 +4,7 @@ from PyPDF2 import PdfReader
 from cerebras.cloud.sdk import Cerebras
 
 # ================= CONFIG & THEME =================
-st.set_page_config(page_title="Avyan LDCE 2025 Pro", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Avyan LDCE v23.1 Pro", layout="wide", initial_sidebar_state="collapsed")
 
 def apply_android_style():
     theme_bg = "#121212" if st.session_state.get('theme') == "Dark" else "#F0F2F6"
@@ -15,6 +15,7 @@ def apply_android_style():
         .header-text {{ text-align: center; font-weight: bold; font-family: 'sans-serif'; font-size: 32px; padding: 10px; color: #ff4b4b; }}
         .stButton>button {{ width: 100%; border-radius: 12px; height: 3.5em; font-weight: 600; border: 1px solid #ccc; }}
         .syllabus-box {{ background: #ffffff; padding: 20px; border-radius: 15px; border-left: 5px solid #ff4b4b; color: #333; margin-bottom: 20px; }}
+        .format-card {{ background: #e3f2fd; padding: 15px; border-radius: 10px; border: 1px dashed #1565c0; color: #0d47a1; font-family: 'monospace'; }}
         </style>
     """, unsafe_allow_html=True)
 
@@ -25,58 +26,44 @@ if "page" not in st.session_state:
         "theme": "Light",
         "lang": "Bilingual",
         "selected_paper": None,
-        "selected_topic": None,
-        "active_model": "None"
+        "selected_topic": None
     })
 
-# ================= UPDATED 2025 SYLLABUS (August 2025 Order) =================
+# ================= LATEST 2025 SYLLABUS (Aug 22, 2025) =================
 SYLLABUS_2025 = {
     "Paper 1": [
         "Post Office Act 2023", "Post Office Rules 2024", "PO Guide Part I & II", 
-        "POSB Manual Vol I, II & III", "SANKALAN (PLI/RPLI Rules)", 
-        "CCS Conduct Rules 1964", "CCS CCA Rules 1965", "GDS Conduct Rules 2020",
-        "IT Modernization 2.0", "DIGIPIN Understanding", "PMLA Act 2002"
+        "POSB Manual Vol I, II & III", "SANKALAN (PLI Rules)", "CCS Conduct Rules 1964", 
+        "CCS CCA Rules 1965", "GDS Rules 2020", "IT Modernization 2.0", "DIGIPIN"
     ],
     "Paper 2": [
-        "Noting (200 words)", "Drafting (200 words)", "Major Penalty Charge Sheet"
+        "Noting (Approx 200 words)", 
+        "Drafting (Approx 200 words)", 
+        "Draft Major Penalty Charge Sheet (Rule 14)"
     ],
     "Paper 3": [
         "Constitution of India", "BNSS 2023 (Bharatiya Nagarik Suraksha Sanhita)", 
         "CAT Act 1985", "RTI Act 2005", "CCS Pension Rules 2021", 
-        "GFR 2017 (Ch 2 & 6)", "FHB Vol I & II", "English Language", 
-        "Reasoning & Aptitude", "Ethics in Service"
+        "GFR 2017", "FHB Vol I & II", "English & Reasoning", "Ethics"
     ]
 }
 
 # ================= HYPER-SWITCH AI ENGINE =================
 def call_ai(prompt):
     api_key = os.getenv("CEREBRAS_API_KEY")
-    if not api_key: return "❌ Error: CEREBRAS_API_KEY is missing in Render settings."
-    
     client = Cerebras(api_key=api_key)
-    
-    # व्यापक मॉडल लिस्ट ताकि 404 एरर न आए
-    models_to_test = [
-        "llama-3.3-70b-versatile", 
-        "llama3.3-70b", 
-        "llama-3.1-70b-versatile",
-        "llama-3.1-8b"
-    ]
-    
-    for model in models_to_test:
+    models = ["llama-3.3-70b-versatile", "llama3.1-8b"]
+    for model in models:
         try:
             res = client.chat.completions.create(
                 model=model,
-                messages=[{"role":"system", "content": f"Expert LDCE Tutor. Language: {st.session_state.lang}"},
+                messages=[{"role":"system", "content": f"You are an IP Exam Expert. Lang: {st.session_state.lang}"},
                           {"role":"user", "content": prompt}],
-                max_tokens=1500
+                max_tokens=2000
             )
-            st.session_state.active_model = model
             return res.choices[0].message.content
-        except:
-            continue # अगले मॉडल पर जाएँ
-            
-    return "⚠️ AI connectivity failed. Cerebras might be down or API key expired."
+        except: continue
+    return "⚠️ AI Connectivity Issue."
 
 # ================= APP PAGES =================
 
@@ -90,22 +77,17 @@ def show_home():
     
     m_l, m_c, m_r = st.columns([1, 2, 1])
     with m_c:
-        search_q = st.text_input("🔍 Smart Search", placeholder="Topic name...")
-        if st.button("Search Online"):
-            st.write(f"https://www.google.com/search?q={search_q}+India+Post+LDCE")
-        
-        st.divider()
         st.subheader("Choose Your Exam Paper (New Pattern)")
         p1, p2, p3 = st.columns(3)
-        if p1.button("Paper 1"): navigate_to("Paper", "Paper 1")
-        if p2.button("Paper 2"): navigate_to("Paper", "Paper 2")
-        if p3.button("Paper 3"): navigate_to("Paper", "Paper 3")
+        if p1.button("Paper 1 (250m)"): navigate_to("Paper", "Paper 1")
+        if p2.button("Paper 2 (50m)"): navigate_to("Paper", "Paper 2")
+        if p3.button("Paper 3 (300m)"): navigate_to("Paper", "Paper 3")
 
 def show_paper():
     paper = st.session_state.selected_paper
     st.markdown(f"<h1 class='header-text'>Let's Prepare {paper}</h1>", unsafe_allow_html=True)
     
-    st.markdown(f"<div class='syllabus-box'><b>{paper} Syllabus (Aug 2025):</b> Select a topic to generate notes.</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='syllabus-box'><b>{paper} Syllabus:</b> Select a topic to study.</div>", unsafe_allow_html=True)
     cols = st.columns(2)
     for i, topic in enumerate(SYLLABUS_2025[paper]):
         if cols[i%2].button(f"📘 {topic}"):
@@ -116,25 +98,30 @@ def show_paper():
 
 def show_study():
     topic = st.session_state.selected_topic
+    paper = st.session_state.selected_paper
     st.markdown(f"<h1 class='header-text'>{topic}</h1>", unsafe_allow_html=True)
     
-    tab1, tab2, tab3, tab4 = st.tabs(["📖 AI Notes", "💬 AI Chat", "📝 MCQ Quiz", "📊 Progress"])
+    tab1, tab2, tab3 = st.tabs(["📖 Study Material", "💬 AI Discussion", "📝 Practice Test"])
     
     with tab1:
-        if st.button("✨ Generate Pro Notes"):
-            with st.spinner("Connecting to Secure AI..."):
-                st.markdown(call_ai(f"Provide detailed notes on '{topic}' for IP Exam (2025 Syllabus)."))
+        if paper == "Paper 2":
+            st.info("💡 Paper 2 requires specific formats. Click below for a solved Master Template.")
+            if st.button("✨ Generate Solved Format & Example"):
+                with st.spinner("Drafting professional content..."):
+                    prompt = f"Provide the official departmental format and a solved 2025 example for: {topic}. Include standard 'Note' or 'Draft' styles as per Postal Manual Vol II."
+                    st.markdown(call_ai(prompt))
+        else:
+            if st.button("✨ Generate Pro Notes"):
+                with st.spinner("Analyzing rules..."):
+                    st.markdown(call_ai(f"Explain {topic} in detail for IP Exam."))
     
     with tab2:
-        q = st.chat_input("Ask about this rule...")
-        if q: st.write(call_ai(f"Question about {topic}: {q}"))
+        query = st.chat_input("Ask any doubt...")
+        if query: st.write(call_ai(f"Regarding {topic}: {query}"))
         
     with tab3:
-        if st.button("Generate Test"):
-            st.markdown(call_ai(f"Generate 5 MCQs on {topic} with answers."))
-            
-    with tab4:
-        st.info("Performance stats will appear here.")
+        if st.button("Start MCQ/Practice Quiz"):
+            st.markdown(call_ai(f"Generate practice questions for {topic}"))
 
     if st.button("⬅️ Back to Syllabus"): navigate_to("Paper", st.session_state.selected_paper)
 
@@ -150,5 +137,4 @@ apply_android_style()
 if st.session_state.page == "Home": show_home()
 elif st.session_state.page == "Paper": show_paper()
 elif st.session_state.page == "Study": show_study()
-
-st.sidebar.caption(f"Status: V22.1 Stable | Active Model: {st.session_state.active_model}")
+    
