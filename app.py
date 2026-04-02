@@ -3,8 +3,8 @@ import os
 import time
 from cerebras.cloud.sdk import Cerebras
 
-# ================= CONFIG =================
-st.set_page_config(page_title="Avyan LDCE v25.2", layout="wide", initial_sidebar_state="collapsed")
+# ================= 1. CONFIG =================
+st.set_page_config(page_title="Avyan LDCE v26.1", layout="wide", initial_sidebar_state="collapsed")
 
 def apply_android_style():
     theme_bg = "#121212" if st.session_state.get('theme') == "Dark" else "#F0F2F6"
@@ -12,13 +12,15 @@ def apply_android_style():
     st.markdown(f"""
         <style>
         .stApp {{ background-color: {theme_bg}; color: {text_col}; }}
-        .header-text {{ text-align: center; font-weight: bold; font-size: 32px; color: #ff4b4b; padding: 10px; }}
+        .header-text {{ text-align: center; font-weight: bold; font-size: 30px; color: #ff4b4b; padding: 10px; }}
         .stButton>button {{ width: 100%; border-radius: 12px; height: 3.5em; font-weight: 600; border: 1px solid #ccc; }}
-        .status-tag {{ font-size: 12px; color: #4caf50; font-weight: bold; }}
+        .timer-text {{ text-align: center; font-size: 24px; font-weight: bold; color: #d32f2f; background: #fff; padding: 10px; border-radius: 10px; border: 2px solid #ff4b4b; }}
+        /* MCQ Clickable Area Fix */
+        .stRadio > div {{ background: white; padding: 15px; border-radius: 10px; border: 1px solid #ddd; }}
         </style>
     """, unsafe_allow_html=True)
 
-# ================= STATE MANAGEMENT =================
+# ================= 2. STATE MANAGEMENT =================
 if "page" not in st.session_state:
     st.session_state.update({
         "page": "Home",
@@ -26,51 +28,40 @@ if "page" not in st.session_state:
         "lang": "Bilingual",
         "selected_paper": None,
         "selected_topic": None,
-        "active_model": "Checking...",
-        "exam_history": [],
-        "weak_topics": set()
+        "exam_active": False,
+        "test_submitted": False,
+        "exam_start_time": 0,
+        "score": 0,
+        "weak_topics": set(),
+        "exam_history": []
     })
 
-# ================= SYLLABUS (Aug 2025 Updates) =================
+# ================= 3. UPDATED SYLLABUS (Aug 2025) =================
 SYLLABUS_2025 = {
-    "Paper 1": ["Post Office Act 2023", "Post Office Rules 2024", "PO Guide Part I & II", "POSB Manual", "IT Modernization 2.0", "DIGIPIN", "PMLA Act 2002"],
+    "Paper 1": ["Post Office Act 2023", "Post Office Rules 2024", "PO Guide Part I & II", "POSB Manual", "IT Modernization 2.0"],
     "Paper 2": ["Noting (15 Marks)", "Drafting (15 Marks)", "Major Penalty Charge Sheet (Rule 14)"],
-    "Paper 3": ["Constitution of India", "BNSS 2023", "CAT Act 1985", "RTI Act 2005", "CCS Pension Rules 2021", "GFR 2017", "English & Reasoning"]
-}
+    "Paper 3": ["Constitution of India", "BNSS 2023", "CAT Act 1985", "RTI Act 2005", "Ethics & Reasoning"]
+[span_4](start_span)[span_5](start_span)[span_6](start_span)}
 
-# ================= AUTO-FAILOVER AI ENGINE =================
+# Official 2024 Questions for Exam Mode
+OFFICIAL_EXAM = [
+    {"q": "Synonym for 'Flummox'?", "opt": ["Baffle", "Elevate", "Praise", "Immerse"], "ans": "Baffle", "topic": "English Language"},
+    {"q": "Who is the Ex-Officio Chairperson of Rajya Sabha?", "opt": ["Governor", "Prime Minister", "President", "Vice President"], "ans": "Vice President", "topic": "Constitution of India"},
+    {"q": "In Water polo, how many players play in each side?", "opt": ["9", "11", "8", "7"], "ans": "7", "topic": "General Knowledge"}
+][span_4](end_span)[span_5](end_span)[span_6](end_span)
+
+# ================= 4. AI ENGINE (Failover) =================
 def call_ai(prompt):
     api_key = os.getenv("CEREBRAS_API_KEY")
-    if not api_key: return "❌ CEREBRAS_API_KEY missing in Render Settings."
-    
     client = Cerebras(api_key=api_key)
-    
-    # Priority list for Auto-Failover
-    models_to_try = [
-        "llama-3.3-70b-versatile", # Best Performance
-        "llama-3.1-70b-versatile", # Backup 1
-        "llama-3.1-8b-instant",    # Backup 2 (Fastest)
-        "llama3.1-70b",            # Legacy Name 1
-        "llama3.1-8b"              # Legacy Name 2
-    ]
-    
-    for model_name in models_to_try:
+    for model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
         try:
-            res = client.chat.completions.create(
-                model=model_name,
-                messages=[{"role": "system", "content": "You are an expert Inspector Posts (IP) LDCE Tutor. Provide answers in Hindi and English."},
-                          {"role": "user", "content": f"Language: {st.session_state.lang}. Prompt: {prompt}"}],
-                max_tokens=2000
-            )
-            st.session_state.active_model = model_name
+            res = client.chat.completions.create(model=model, messages=[{"role":"user","content":prompt}], max_tokens=1500)
             return res.choices[0].message.content
-        except Exception:
-            # If current model fails, it automatically moves to the next one in list
-            continue
-            
-    return "⚠️ Critical AI Fail: All available models (Failover exhausted). Check API Quota."
+        except: continue
+    return "AI connectivity failed."
 
-# ================= PAGES =================
+# ================= 5. PAGES =================
 
 def show_home():
     st.markdown("<h1 class='header-text'>Welcome Trainee</h1>", unsafe_allow_html=True)
@@ -80,51 +71,60 @@ def show_home():
     if c3.button("Paper 3 (300m)"): navigate_to("Paper", "Paper 3")
     
     st.divider()
-    st.subheader("📊 Exam Progress")
-    if st.session_state.exam_history:
-        st.line_chart(st.session_state.exam_history)
-    else:
-        st.info("Performance data will appear here after your first test.")
+    st.subheader("📊 Performance Tracker")
+    if st.session_state.exam_history: st.line_chart(st.session_state.exam_history)
 
 def show_paper():
     paper = st.session_state.selected_paper
-    st.markdown(f"<h1 class='header-text'>Prepare {paper}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h1 class='header-text'>{paper} Syllabus</h1>", unsafe_allow_html=True)
+    for topic in SYLLABUS_2025.get(paper, []):
+        if st.button(f"📌 {topic}"): navigate_to("Study", topic)
     
-    col_a, col_b = st.columns([2, 1])
-    with col_a:
-        st.write("### 📘 Syllabus Topics (Clickable)")
-        for topic in SYLLABUS_2025.get(paper, []):
-            if st.button(f"📌 {topic}", key=f"p_{topic}"):
-                navigate_to("Study", topic)
-
-    with col_b:
-        st.write("### 🧠 Smart Revision")
-        if st.session_state.weak_topics:
-            st.error("Focus Areas:")
-            for wt in st.session_state.weak_topics:
-                if st.button(f"🔄 Revise {wt}", key=f"r_{wt}"):
-                    navigate_to("Study", wt)
-        else:
-            st.success("No weak topics! Keep studying.")
-
     st.divider()
-    c_back, c_exam = st.columns(2)
-    if c_back.button("⬅️ Back Home"): navigate_to("Home")
-    if c_exam.button("📝 Take Live Exam"): st.toast("Exam Mode Loading...")
+    c_b, c_e = st.columns(2)
+    if c_b.button("⬅️ Back Home"): navigate_to("Home")
+    if c_e.button("📝 Start Live Exam (Timed)"): 
+        st.session_state.exam_active = True
+        st.session_state.test_submitted = False
+        st.session_state.exam_start_time = time.time()
+        navigate_to("Exam")
+
+def show_exam():
+    # EXAM TIMER LOGIC
+    [span_7](start_span)total_time = 150 * 60 # 2.5 Hours in seconds[span_7](end_span)
+    elapsed = time.time() - st.session_state.exam_start_time
+    remaining = total_time - elapsed
+    
+    if remaining <= 0:
+        st.error("Time Up! Submit your exam now.")
+        remaining = 0
+    
+    mins, secs = divmod(int(remaining), 60)
+    st.markdown(f"<div class='timer-text'>⏱️ Countdown: {mins:02d}:{secs:02d}</div>", unsafe_allow_html=True)
+    
+    if not st.session_state.test_submitted:
+        with st.form("exam_form"):
+            user_ans = {}
+            for i, item in enumerate(OFFICIAL_EXAM):
+                st.write(f"**Q{i+1}: {item['q']}**")
+                # CLICKABLE RADIO BUTTONS
+                user_ans[i] = st.radio("Select Response:", item['opt'], key=f"ex_{i}")
+            
+            if st.form_submit_button("Submit Final Exam"):
+                score = sum(1 for i, item in enumerate(OFFICIAL_EXAM) if user_ans[i] == item['ans'])
+                st.session_state.score = score
+                st.session_state.exam_history.append(score)
+                st.session_state.test_submitted = True
+                st.rerun()
+    else:
+        st.success(f"Exam Submitted! Result: {st.session_state.score} / {len(OFFICIAL_EXAM)}")
+        if st.button("⬅️ Back to Syllabus"): navigate_to("Paper", st.session_state.selected_paper)
 
 def show_study():
     topic = st.session_state.selected_topic
     st.markdown(f"<h1 class='header-text'>{topic}</h1>", unsafe_allow_html=True)
-    
-    t1, t2 = st.tabs(["📖 Study Notes", "💬 Chat Doubt"])
-    with t1:
-        if st.button("✨ Generate AI Notes"):
-            with st.spinner(f"Trying Auto-Failover Models..."):
-                st.markdown(call_ai(f"Detailed study notes on {topic} for IP Exam."))
-    with t2:
-        q = st.chat_input("Ask anything...")
-        if q: st.write(call_ai(f"Doubt about {topic}: {q}"))
-
+    if st.button("📖 Generate Study Notes"):
+        st.markdown(call_ai(f"Notes for {topic} in {st.session_state.lang}"))
     if st.button("⬅️ Back to Syllabus"): navigate_to("Paper", st.session_state.selected_paper)
 
 def navigate_to(page, data=None):
@@ -133,12 +133,10 @@ def navigate_to(page, data=None):
     if page == "Study": st.session_state.selected_topic = data
     st.rerun()
 
-# ================= ROUTER =================
+# ================= 6. ROUTER =================
 apply_android_style()
-st.sidebar.markdown(f"**System Status:** Online")
-st.sidebar.markdown(f"**Active AI:** `{st.session_state.active_model}`")
-
 if st.session_state.page == "Home": show_home()
 elif st.session_state.page == "Paper": show_paper()
 elif st.session_state.page == "Study": show_study()
-    
+elif st.session_state.page == "Exam": show_exam()
+            
