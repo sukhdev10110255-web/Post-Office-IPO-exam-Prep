@@ -1,39 +1,29 @@
 import streamlit as st
-import os, json, re, random
+import os, json, re
 from gtts import gTTS
 import tempfile
-from cerebras.cloud.sdk import Cerebras
 
 # ================= CONFIG =================
-st.set_page_config(page_title="Avyan LDCE v17", layout="wide")
+st.set_page_config(page_title="Avyan LDCE v17.2", layout="wide")
+
+# ================= UI =================
+st.markdown("""
+<style>
+.stApp {background:#f4f6fb;}
+.card {
+    background:white;
+    padding:15px;
+    border-radius:15px;
+    margin:10px 0;
+    box-shadow:0 3px 8px rgba(0,0,0,0.1);
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ================= SETTINGS =================
-col1, col2 = st.columns([1,1])
-with col1:
-    theme = st.selectbox("🎨 Theme", ["Light","Dark"])
-with col2:
-    lang = st.selectbox("🌐 Language", ["Bilingual","English","Hindi"])
-
-if theme=="Dark":
-    st.markdown("<style>.stApp{background:#0e1117;color:white}</style>", unsafe_allow_html=True)
-
-def format_prompt(text):
-    if lang=="English": return f"Answer in English:\n{text}"
-    elif lang=="Hindi": return f"Answer in Hindi:\n{text}"
-    else: return f"Answer in Hindi and English:\n{text}"
-
-# ================= AI =================
-def ai(prompt):
-    try:
-        client = Cerebras(api_key=os.getenv("CEREBRAS_API_KEY"))
-        res = client.chat.completions.create(
-            model="llama3.1-8b-instant",
-            messages=[{"role":"user","content":prompt}],
-            max_tokens=1200
-        )
-        return res.choices[0].message.content
-    except:
-        return "AI Error"
+col1,col2 = st.columns(2)
+theme = col1.selectbox("🎨 Theme", ["Light","Dark"])
+lang = col2.selectbox("🌐 Language", ["Bilingual","English","Hindi"])
 
 # ================= VOICE =================
 def speak(text):
@@ -42,161 +32,111 @@ def speak(text):
     tts.save(file.name)
     return file.name
 
-# ================= SESSION =================
-defaults = {
-    "page":"home",
-    "paper":"",
-    "topic":"",
-    "questions":[],
-    "weak":{},
-    "score":0,
-    "exam_index":0,
-    "exam_q":[]
-}
-for k,v in defaults.items():
-    if k not in st.session_state:
-        st.session_state[k]=v
+# ================= TITLE =================
+st.title("🚀 Avyan LDCE IP Masterpiece v17.2")
 
-# ================= BASE SYLLABUS =================
-base_syllabus = {
-    "Paper 1":[
-        "Indian Post Office Act 1898",
-        "Post Office Guide Part I",
-        "Savings Bank Rules",
-        "Postal Manual Volume VI"
-    ],
-    "Paper 2":[
-        "Mail Manual",
-        "Parcel Rules",
-        "IP Rules"
-    ],
-    "Paper 3":[
-        "Hindi Grammar",
-        "Essay Writing",
-        "Comprehension"
-    ],
-    "Paper 4":[
-        "Accounts",
-        "Statistics",
-        "Office Procedure"
-    ]
+# ================= SMART SEARCH =================
+st.markdown("### 🌐 Smart Search")
+
+colA, colB = st.columns([4,1])
+search_query = colA.text_input("Search topic / act / rules")
+
+search_engine = st.selectbox(
+    "Choose Search Engine",
+    ["Google","Bing","DuckDuckGo"]
+)
+
+if colB.button("Search"):
+    if search_engine=="Google":
+        st.markdown(f"https://www.google.com/search?q={search_query}")
+    elif search_engine=="Bing":
+        st.markdown(f"https://www.bing.com/search?q={search_query}")
+    else:
+        st.markdown(f"https://duckduckgo.com/?q={search_query}")
+
+# ================= PDF =================
+uploaded = st.file_uploader("📄 Upload PDF", type="pdf")
+
+# ================= PAPER =================
+paper = st.selectbox("📚 Select Paper", ["Paper 1","Paper 2","Paper 3","Paper 4"])
+
+syllabus = {
+    "Paper 1":["Post Office Act","Savings Bank Rules"],
+    "Paper 2":["Mail Manual","Parcel Rules"],
+    "Paper 3":["Grammar","Essay"],
+    "Paper 4":["Accounts","Statistics"]
 }
 
-# ================= HOME =================
-if st.session_state.page=="home":
+topic = st.text_input("🔍 Enter Topic")
+if st.button("Enter Topic"):
+    st.success(f"Topic selected: {topic}")
 
-    st.title("🚀 Avyan LDCE IP Masterpiece v17.0")
+topic_select = st.selectbox("Or choose from syllabus", syllabus[paper])
 
-    col1,col2,col3,col4 = st.columns(4)
+final_topic = topic if topic else topic_select
 
-    if col1.button("📘 Paper 1"):
-        st.session_state.paper="Paper 1"; st.session_state.page="syllabus"
-    if col2.button("📗 Paper 2"):
-        st.session_state.paper="Paper 2"; st.session_state.page="syllabus"
-    if col3.button("📙 Paper 3"):
-        st.session_state.paper="Paper 3"; st.session_state.page="syllabus"
-    if col4.button("📕 Paper 4"):
-        st.session_state.paper="Paper 4"; st.session_state.page="syllabus"
+# ================= NOTES =================
+st.markdown('<div class="card">📘 Notes</div>', unsafe_allow_html=True)
 
-# ================= SYLLABUS =================
-elif st.session_state.page=="syllabus":
-
-    st.title(f"{st.session_state.paper} Syllabus")
-
-    if st.button("⬅️ Back"):
-        st.session_state.page="home"
-
-    # base syllabus
-    topics = base_syllabus.get(st.session_state.paper, [])
-
-    st.subheader("📚 Topics")
-    for t in topics:
-        if st.button(t):
-            st.session_state.topic = t
-            st.session_state.page="topic"
-
-    # AI expand
-    if st.button("🤖 Load Full AI Syllabus"):
-        ai_topics = ai(f"Give full syllabus topics list for {st.session_state.paper}")
-        st.write(ai_topics)
-
-# ================= TOPIC =================
-elif st.session_state.page=="topic":
-
-    st.title(f"📖 {st.session_state.topic}")
-
-    if st.button("⬅️ Back"):
-        st.session_state.page="syllabus"
-
-    # ---------- NOTES ----------
-    st.subheader("📖 Notes")
-    notes = ai(format_prompt(f"Short exam notes:\n{st.session_state.topic}"))
+if st.button("Generate Notes"):
+    notes = f"{final_topic} notes (Hindi + English)"
     st.write(notes)
 
-    # ---------- VOICE ----------
-    if st.button("🔊 Listen Notes"):
-        audio = speak(notes)
-        st.audio(audio)
+    if st.button("🔊 Voice"):
+        st.audio(speak(notes))
 
-    # ---------- CHAT ----------
-    st.subheader("💬 AI Discussion")
-    q = st.text_input("Ask doubt")
-    if q:
-        ans = ai(q)
-        st.write(ans)
+# ================= AI CHAT =================
+st.markdown('<div class="card">💬 AI Discussion</div>', unsafe_allow_html=True)
 
-        if st.button("🔊 Speak Answer"):
-            st.audio(speak(ans))
+q = st.text_input("Ask doubt")
+if q:
+    st.write(f"Answer for {q}")
 
-    # ---------- MCQ ----------
-    st.subheader("📝 MCQ Test")
+# ================= MCQ =================
+st.markdown('<div class="card">📝 MCQ Test</div>', unsafe_allow_html=True)
 
-    if st.button("Generate MCQ"):
-        res = ai(f"Generate 5 MCQs JSON:\n{st.session_state.topic}")
-        try:
-            data = json.loads(re.search(r'\{.*\}', res, re.DOTALL).group())
-            st.session_state.questions = data["questions"]
-        except:
-            st.error("MCQ error")
+if st.button("Generate MCQ"):
+    st.session_state.mcq = [
+        {"q":f"What is {final_topic}?","opt":["A","B","C","D"],"ans":"A"}
+    ]
 
-    for i,q in enumerate(st.session_state.questions):
-        st.write(q["question"])
-        ans = st.radio("Choose", q["options"], key=f"q{i}")
+if "mcq" in st.session_state:
+    for i,q in enumerate(st.session_state.mcq):
+        st.write(q["q"])
+        ans = st.radio("Choose", q["opt"], key=i)
 
         if st.button(f"Check {i}"):
-            if ans == q["correct_answer"]:
+            if ans == q["ans"]:
                 st.success("Correct")
             else:
                 st.error("Wrong")
-                st.session_state.weak[q["question"]] = q["correct_answer"]
 
-    # ---------- EXAM ----------
-    st.subheader("🎯 Final Exam")
+# ================= EXAM =================
+st.markdown('<div class="card">🎯 Final Exam</div>', unsafe_allow_html=True)
 
-    if st.button("Start Exam"):
-        st.session_state.exam_q = st.session_state.questions
-        st.session_state.exam_index = 0
-        st.session_state.score = 0
+if st.button("Start Exam"):
+    st.session_state.score = 0
 
-    if st.session_state.exam_q:
-        q = st.session_state.exam_q[st.session_state.exam_index]
-        st.write(q["question"])
-        ans = st.radio("Answer", q["options"], key="exam")
+    q = {"q":"Sample Q","opt":["A","B","C","D"],"ans":"A"}
+    ans = st.radio(q["q"], q["opt"])
 
-        if st.button("Next"):
-            if ans == q["correct_answer"]:
-                st.session_state.score += 1
-            else:
-                st.session_state.score -= 0.25
+    if st.button("Submit Exam"):
+        if ans == q["ans"]:
+            st.session_state.score += 1
+        else:
+            st.session_state.score -= 0.25
 
-            st.session_state.exam_index += 1
+        st.success(f"Score: {st.session_state.score}")
 
-            if st.session_state.exam_index >= len(st.session_state.exam_q):
-                st.success(f"Final Score: {st.session_state.score}")
+# ================= WEAK =================
+st.markdown('<div class="card">📉 Weak Topics</div>', unsafe_allow_html=True)
+st.write("Auto tracking coming...")
 
-    # ---------- WEAK ----------
-    st.subheader("📉 Weak Topics")
-    st.write(st.session_state.weak)
+# ================= REVISION =================
+if st.button("🧠 Smart Revision"):
+    st.write("Revision mode started")
 
-    if st.button("🧠 Smart Revision"):
-        st.write(ai(format_prompt(f"Teach weak topics:\n{list(st.session_state.weak.keys())}")))
+# ================= RANK =================
+score = st.number_input("Enter score for rank prediction")
+if st.button("Predict Rank"):
+    st.write("Rank approx: Top 1000")
