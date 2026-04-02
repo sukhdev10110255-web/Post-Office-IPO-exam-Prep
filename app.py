@@ -1,9 +1,10 @@
 import streamlit as st
 import os
+import pandas as pd
 from cerebras.cloud.sdk import Cerebras
 
-# ================= CONFIG =================
-st.set_page_config(page_title="Avyan LDCE v24.3", layout="wide", initial_sidebar_state="collapsed")
+# ================= CONFIG & THEME =================
+st.set_page_config(page_title="Avyan LDCE v25.0", layout="wide", initial_sidebar_state="collapsed")
 
 def apply_android_style():
     theme_bg = "#121212" if st.session_state.get('theme') == "Dark" else "#F0F2F6"
@@ -13,10 +14,11 @@ def apply_android_style():
         .stApp {{ background-color: {theme_bg}; color: {text_col}; }}
         .header-text {{ text-align: center; font-weight: bold; font-size: 32px; color: #ff4b4b; padding: 10px; }}
         .stButton>button {{ width: 100%; border-radius: 12px; height: 3.5em; font-weight: 600; border: 1px solid #ccc; }}
+        .weak-box {{ background-color: #ffebee; border-left: 5px solid #f44336; padding: 10px; border-radius: 5px; color: #b71c1c; margin-bottom: 5px; }}
         </style>
     """, unsafe_allow_html=True)
 
-# ================= STATE MANAGEMENT =================
+# ================= STATE MANAGEMENT (History & Weak Points) =================
 if "page" not in st.session_state:
     st.session_state.update({
         "page": "Home",
@@ -24,120 +26,123 @@ if "page" not in st.session_state:
         "lang": "Bilingual",
         "selected_paper": None,
         "selected_topic": None,
-        "active_model": "None"
+        "exam_history": [], # List of scores
+        "weak_topics": set(), # Topics where user failed questions
+        "writing_content": ""
     })
 
-# ================= FULL SYLLABUS (Aug 2025 Order) =================
+# ================= SYLLABUS & EXAM DATA =================
 SYLLABUS_2025 = {
-    "Paper 1": [
-        "The Post Office Act, 2023", "The Post Office Rules, 2024", "PO Guide Part I & II", 
-        "Government Savings Promotion Act 1873", "Prevention of Money Laundering Act 2002", 
-        "Consumer Protection Act 2019", "Information Technology Act 2000",
-        "POSB Manual Vol I, II & III", "SANKALAN (PLI Rules)", "CCS Conduct Rules 1964", 
-        "CCS CCA Rules 1965", "GDS Rules 2020", "IT Modernization 2.0 (APT Knowledge)", 
-        "DIGIPIN Basic Understanding", "Dak Ghar Niryat Kendra (DNKs)"
-    ],
-    "Paper 2": [
-        "Noting (Approx 200 words)", 
-        "Drafting (Approx 200 words)", 
-        "Draft Major Penalty Charge Sheet"
-    ],
-    "Paper 3": [
-        "Constitution of India (Fundamental Rights/Duties)", 
-        "The Bharatiya Nagarik Suraksha Sanhita, 2023 (BNSS)", 
-        "Central Administrative Tribunal Act, 1985", "RTI Act, 2005", 
-        "Manuals on Procurement", "CCS Pension Rules 2021", 
-        "CCS GPF Rules 1961", "GFR 2017 (Chapter 2 & 6)", "FHB Volume I & II", 
-        "English Language", "General Knowledge & Current Affairs",
-        "Reasoning & Quantitative Aptitude"
-    ]
+    "Paper 1": ["Post Office Act 2023", "Post Office Rules 2024", "PO Guide Part I & II", "POSB Manual", "IT Modernization 2.0"],
+    "Paper 2": ["Noting (15 Marks)", "Drafting (15 Marks)", "Major Penalty Charge Sheet (20 Marks)"],
+    "Paper 3": ["Constitution of India", "BNSS 2023", "CAT Act 1985", "RTI Act 2005", "Ethics & Reasoning"]
 }
 
-# ================= UNIVERSAL AI ENGINE (Model Fix) =================
+# Real Questions from your 2024 Paper-IV
+OFFICIAL_EXAM = [
+    {"q": "Synonym for 'Flummox'?", "opt": ["Baffle", "Elevate", "Praise", "Immerse"], "ans": "Baffle", "topic": "English Language"},
+    {"q": "Ex-Officio Chairperson of Rajya Sabha?", "opt": ["Governor", "Prime Minister", "President", "Vice President"], "ans": "Vice President", "topic": "Constitution of India"},
+    {"q": "9th edition of ICC Women's T20 World Cup Host?", "opt": ["England", "Bangladesh", "Australia", "India"], "ans": "Bangladesh", "topic": "General Knowledge"},
+    {"q": "Richard is afraid ____ spiders.", "opt": ["off", "of", "from", "in"], "ans": "of", "topic": "English Language"}
+]
+
+# ================= AI ENGINE =================
 def call_ai(prompt):
     api_key = os.getenv("CEREBRAS_API_KEY")
-    if not api_key: return "❌ CEREBRAS_API_KEY missing in Render."
-    
     client = Cerebras(api_key=api_key)
-    # Trying all known working names on Cerebras
-    models_to_test = [
-        "llama-3.3-70b-versatile", 
-        "llama-3.1-70b-versatile",
-        "llama-3.1-8b-instant",
-        "llama3.1-70b",
-        "llama3.1-8b"
-    ]
-    
-    for model_name in models_to_test:
+    for model in ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]:
         try:
             res = client.chat.completions.create(
-                model=model_name,
-                messages=[{"role": "system", "content": "You are an expert LDCE IP Tutor."},
-                          {"role": "user", "content": f"In {st.session_state.lang}: {prompt}"}],
+                model=model,
+                messages=[{"role":"user", "content": f"In {st.session_state.lang}: {prompt}"}],
                 max_tokens=1500
             )
-            st.session_state.active_model = model_name
             return res.choices[0].message.content
-        except Exception:
-            continue
-            
-    return "⚠️ AI Connectivity Fail: All models failed. Please verify your API Key."
+        except: continue
+    return "⚠️ AI Connection Fail."
 
 # ================= PAGES =================
 
 def show_home():
     st.markdown("<h1 class='header-text'>Welcome Trainee</h1>", unsafe_allow_html=True)
-    st.divider()
     c1, c2, c3 = st.columns(3)
-    if c1.button("Paper 1 (250m)"): navigate_to("Paper", "Paper 1")
-    if c2.button("Paper 2 (50m)"): navigate_to("Paper", "Paper 2")
-    if c3.button("Paper 3 (300m)"): navigate_to("Paper", "Paper 3")
+    if c1.button("Paper 1"): navigate_to("Paper", "Paper 1")
+    if c2.button("Paper 2"): navigate_to("Paper", "Paper 2")
+    if c3.button("Paper 3"): navigate_to("Paper", "Paper 3")
     
-    with st.sidebar:
-        st.selectbox("Theme", ["Light", "Dark"], key="theme")
-        st.selectbox("Language", ["Bilingual", "Hindi", "English"], key="lang")
-        st.caption(f"Active Model: {st.session_state.active_model}")
+    st.divider()
+    st.subheader("📊 Your Performance History")
+    if st.session_state.exam_history:
+        st.line_chart(st.session_state.exam_history)
+    else:
+        st.info("No exam history yet. Take a test to see progress!")
 
 def show_paper():
     paper = st.session_state.selected_paper
     st.markdown(f"<h1 class='header-text'>Prepare {paper}</h1>", unsafe_allow_html=True)
-    st.write(f"### Click a topic to study ({paper}):")
     
-    cols = st.columns(2)
-    for i, topic in enumerate(SYLLABUS_2025.get(paper, [])):
-        if cols[i%2].button(f"📘 {topic}"):
-            navigate_to("Study", topic)
+    col_study, col_rev = st.columns([2, 1])
+    with col_study:
+        st.write("### 📘 Syllabus Topics")
+        for topic in SYLLABUS_2025.get(paper, []):
+            if st.button(f"📌 {topic}", key=f"btn_{topic}"):
+                navigate_to("Study", topic)
+    
+    with col_rev:
+        st.write("### 🧠 Smart Revision")
+        if st.session_state.weak_topics:
+            st.error("Weak Topics Identified:")
+            for wt in st.session_state.weak_topics:
+                if st.button(f"🔄 Revise {wt}", key=f"rev_{wt}"):
+                    navigate_to("Study", wt)
+        else:
+            st.success("No weak points yet! Excellent.")
 
     st.divider()
-    col_back, col_exam = st.columns(2)
-    if col_back.button("⬅️ Back to Home"): navigate_to("Home")
-    if col_exam.button("📝 Take Live Exam"): st.info("Exam System Initializing...")
+    c_b, c_e = st.columns(2)
+    if c_b.button("⬅️ Back Home"): navigate_to("Home")
+    if c_e.button("📝 Take Live Exam"): navigate_to("Exam")
+
+def show_exam():
+    st.markdown("<h1 class='header-text'>Live Exam Mode</h1>", unsafe_allow_html=True)
+    with st.form("exam_form"):
+        user_ans = {}
+        for i, item in enumerate(OFFICIAL_EXAM):
+            st.write(f"**Q{i+1}: {item['q']}**")
+            user_ans[i] = st.radio("Select:", item['opt'], key=f"q_{i}")
+        
+        if st.form_submit_button("Submit & Save Result"):
+            correct_count = 0
+            for i, item in enumerate(OFFICIAL_EXAM):
+                if user_ans[i] == item['ans']:
+                    correct_count += 1
+                else:
+                    st.session_state.weak_topics.add(item['topic']) # ऑटो Weak Point ट्रैकिंग
+            
+            st.session_state.exam_history.append(correct_count)
+            st.success(f"Exam Submitted! Your Score: {correct_count}/{len(OFFICIAL_EXAM)}")
+            time.sleep(2)
+            navigate_to("Paper", st.session_state.selected_paper)
 
 def show_study():
     topic = st.session_state.selected_topic
     st.markdown(f"<h1 class='header-text'>{topic}</h1>", unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["📖 AI Notes", "💬 AI Discussion", "📝 MCQ Practice"])
-    
+    tab1, tab2 = st.tabs(["📖 AI Notes", "💬 AI Discussion"])
     with tab1:
-        if st.button("✨ Generate Detailed Notes"):
-            with st.spinner("Connecting to AI..."):
-                st.markdown(call_ai(f"Provide professional notes on '{topic}' for LDCE IP Exam."))
-    
+        if st.button("✨ Generate Notes"):
+            st.markdown(call_ai(f"Provide detailed notes for {topic}"))
     with tab2:
-        q = st.chat_input("Ask a doubt...")
-        if q: st.write(call_ai(f"Topic: {topic}. Query: {q}"))
-        
-    with tab3:
-        if st.button("Generate MCQs"):
-            st.markdown(call_ai(f"Generate 5 MCQs on {topic}."))
+        query = st.chat_input("Ask AI...")
+        if query: st.write(call_ai(query))
 
     if st.button("⬅️ Back to Syllabus"): navigate_to("Paper", st.session_state.selected_paper)
 
 def navigate_to(page, data=None):
     st.session_state.page = page
-    if page == "Paper": st.session_state.selected_paper = data
-    if page == "Study": st.session_state.selected_topic = data
+    if data:
+        if page == "Paper": st.session_state.selected_paper = data
+        if page == "Study": st.session_state.selected_topic = data
     st.rerun()
 
 # ================= ROUTER =================
@@ -145,4 +150,5 @@ apply_android_style()
 if st.session_state.page == "Home": show_home()
 elif st.session_state.page == "Paper": show_paper()
 elif st.session_state.page == "Study": show_study()
+elif st.session_state.page == "Exam": show_exam()
     
