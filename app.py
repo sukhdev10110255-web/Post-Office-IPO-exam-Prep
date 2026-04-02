@@ -1,140 +1,109 @@
 import streamlit as st
 import os
-from PyPDF2 import PdfReader
+import time
 from cerebras.cloud.sdk import Cerebras
 
-# ================= CONFIG & THEME =================
-st.set_page_config(page_title="Avyan LDCE v23.1 Pro", layout="wide", initial_sidebar_state="collapsed")
+# ================= CONFIG =================
+st.set_page_config(page_title="Avyan LDCE v24.0", layout="wide", initial_sidebar_state="collapsed")
 
+# --- UI Styling ---
 def apply_android_style():
     theme_bg = "#121212" if st.session_state.get('theme') == "Dark" else "#F0F2F6"
     text_col = "white" if st.session_state.get('theme') == "Dark" else "black"
     st.markdown(f"""
         <style>
         .stApp {{ background-color: {theme_bg}; color: {text_col}; }}
-        .header-text {{ text-align: center; font-weight: bold; font-family: 'sans-serif'; font-size: 32px; padding: 10px; color: #ff4b4b; }}
-        .stButton>button {{ width: 100%; border-radius: 12px; height: 3.5em; font-weight: 600; border: 1px solid #ccc; }}
-        .syllabus-box {{ background: #ffffff; padding: 20px; border-radius: 15px; border-left: 5px solid #ff4b4b; color: #333; margin-bottom: 20px; }}
-        .format-card {{ background: #e3f2fd; padding: 15px; border-radius: 10px; border: 1px dashed #1565c0; color: #0d47a1; font-family: 'monospace'; }}
+        .header-text {{ text-align: center; font-weight: bold; font-size: 30px; color: #ff4b4b; padding: 10px; }}
+        .stButton>button {{ width: 100%; border-radius: 12px; height: 3.5em; font-weight: 600; }}
+        .result-card {{ padding: 20px; background-color: #d4edda; color: #155724; border-radius: 10px; text-align: center; font-size: 20px; font-weight: bold; }}
         </style>
     """, unsafe_allow_html=True)
 
-# ================= STATE MANAGEMENT =================
+# ================= SESSION STATE =================
 if "page" not in st.session_state:
     st.session_state.update({
         "page": "Home",
         "theme": "Light",
         "lang": "Bilingual",
         "selected_paper": None,
-        "selected_topic": None
+        "test_submitted": False,
+        "score": 0
     })
 
-# ================= LATEST 2025 SYLLABUS (Aug 22, 2025) =================
-SYLLABUS_2025 = {
-    "Paper 1": [
-        "Post Office Act 2023", "Post Office Rules 2024", "PO Guide Part I & II", 
-        "POSB Manual Vol I, II & III", "SANKALAN (PLI Rules)", "CCS Conduct Rules 1964", 
-        "CCS CCA Rules 1965", "GDS Rules 2020", "IT Modernization 2.0", "DIGIPIN"
-    ],
-    "Paper 2": [
-        "Noting (Approx 200 words)", 
-        "Drafting (Approx 200 words)", 
-        "Draft Major Penalty Charge Sheet (Rule 14)"
-    ],
-    "Paper 3": [
-        "Constitution of India", "BNSS 2023 (Bharatiya Nagarik Suraksha Sanhita)", 
-        "CAT Act 1985", "RTI Act 2005", "CCS Pension Rules 2021", 
-        "GFR 2017", "FHB Vol I & II", "English & Reasoning", "Ethics"
-    ]
-}
+# ================= TEST QUESTIONS (Based on your 2024 PDF) =================
+[span_0](start_span)#
+OFFICIAL_QUESTIONS = [
+    {"q": "What is the synonym of 'Flummox'?", "opt": ["Baffle", "Elevate", "Praise", "Immerse"], "ans": "Baffle"},
+    {"q": "Antonym of 'Paucity'?", "opt": ["Dearth", "Abundance", "Exigency", "Sparsity"], "ans": "Abundance"},
+    {"q": "Meaning of idiom 'To be in two minds'?", "opt": ["Over confident", "Less effective", "In dilemma", "None"], "ans": "In dilemma"},
+    {"q": "Richard is afraid ____ spiders.", "opt": ["off", "of", "from", "in"], "ans": "of"},
+    {"q": "Which country will host 9th edition of ICC Women's T20 World Cup?", "opt": ["England", "Bangladesh", "Australia", "India"], "ans": "Bangladesh"}
+]
 
-# ================= HYPER-SWITCH AI ENGINE =================
+# ================= AI ENGINE =================
 def call_ai(prompt):
     api_key = os.getenv("CEREBRAS_API_KEY")
     client = Cerebras(api_key=api_key)
-    models = ["llama-3.3-70b-versatile", "llama3.1-8b"]
-    for model in models:
-        try:
-            res = client.chat.completions.create(
-                model=model,
-                messages=[{"role":"system", "content": f"You are an IP Exam Expert. Lang: {st.session_state.lang}"},
-                          {"role":"user", "content": prompt}],
-                max_tokens=2000
-            )
-            return res.choices[0].message.content
-        except: continue
-    return "⚠️ AI Connectivity Issue."
+    try:
+        res = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role":"user", "content": f"Lang: {st.session_state.lang}. Prompt: {prompt}"}],
+            max_tokens=1000
+        )
+        return res.choices[0].message.content
+    except: return "AI Connection Error."
 
-# ================= APP PAGES =================
+# ================= PAGES =================
 
 def show_home():
-    col_l, col_r = st.columns([3, 1])
-    with col_r:
-        st.session_state.theme = st.selectbox("🎨 Theme", ["Light", "Dark"])
-        st.session_state.lang = st.selectbox("🌐 Language", ["Bilingual", "Hindi", "English"])
-    
     st.markdown("<h1 class='header-text'>Welcome Trainee</h1>", unsafe_allow_html=True)
-    
-    m_l, m_c, m_r = st.columns([1, 2, 1])
-    with m_c:
-        st.subheader("Choose Your Exam Paper (New Pattern)")
-        p1, p2, p3 = st.columns(3)
-        if p1.button("Paper 1 (250m)"): navigate_to("Paper", "Paper 1")
-        if p2.button("Paper 2 (50m)"): navigate_to("Paper", "Paper 2")
-        if p3.button("Paper 3 (300m)"): navigate_to("Paper", "Paper 3")
+    c1, c2, c3 = st.columns(3)
+    if c1.button("Paper 1"): navigate_to("Paper", "Paper 1")
+    if c2.button("Paper 2"): navigate_to("Paper", "Paper 2")
+    if c3.button("Paper 3"): navigate_to("Paper", "Paper 3")
 
 def show_paper():
     paper = st.session_state.selected_paper
-    st.markdown(f"<h1 class='header-text'>Let's Prepare {paper}</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h1 class='header-text'>Prepare {paper}</h1>", unsafe_allow_html=True)
+    st.info(f"Syllabus for {paper} is loaded below.")
     
-    st.markdown(f"<div class='syllabus-box'><b>{paper} Syllabus:</b> Select a topic to study.</div>", unsafe_allow_html=True)
-    cols = st.columns(2)
-    for i, topic in enumerate(SYLLABUS_2025[paper]):
-        if cols[i%2].button(f"📘 {topic}"):
-            navigate_to("Study", topic)
-    
+    # Bottom Buttons as requested
     st.divider()
-    if st.button("⬅️ Back to Home"): navigate_to("Home")
+    col1, col2 = st.columns(2)
+    if col1.button("⬅️ Back to Home"): navigate_to("Home")
+    if col2.button("📝 Take Live Exam"): navigate_to("Exam")
 
-def show_study():
-    topic = st.session_state.selected_topic
-    paper = st.session_state.selected_paper
-    st.markdown(f"<h1 class='header-text'>{topic}</h1>", unsafe_allow_html=True)
+def show_exam():
+    st.markdown(f"<h1 class='header-text'>{st.session_state.selected_paper} - Mock Test</h1>", unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["📖 Study Material", "💬 AI Discussion", "📝 Practice Test"])
-    
-    with tab1:
-        if paper == "Paper 2":
-            st.info("💡 Paper 2 requires specific formats. Click below for a solved Master Template.")
-            if st.button("✨ Generate Solved Format & Example"):
-                with st.spinner("Drafting professional content..."):
-                    prompt = f"Provide the official departmental format and a solved 2025 example for: {topic}. Include standard 'Note' or 'Draft' styles as per Postal Manual Vol II."
-                    st.markdown(call_ai(prompt))
-        else:
-            if st.button("✨ Generate Pro Notes"):
-                with st.spinner("Analyzing rules..."):
-                    st.markdown(call_ai(f"Explain {topic} in detail for IP Exam."))
-    
-    with tab2:
-        query = st.chat_input("Ask any doubt...")
-        if query: st.write(call_ai(f"Regarding {topic}: {query}"))
-        
-    with tab3:
-        if st.button("Start MCQ/Practice Quiz"):
-            st.markdown(call_ai(f"Generate practice questions for {topic}"))
-
-    if st.button("⬅️ Back to Syllabus"): navigate_to("Paper", st.session_state.selected_paper)
+    if not st.session_state.test_submitted:
+        with st.form("exam_form"):
+            user_responses = {}
+            for i, item in enumerate(OFFICIAL_QUESTIONS):
+                st.write(f"**Q{i+1}: {item['q']}**")
+                user_responses[i] = st.radio("Choose answer:", item['opt'], key=f"q{i}")
+            
+            if st.form_submit_button("Submit Exam"):
+                score = sum(1 for i, item in enumerate(OFFICIAL_QUESTIONS) if user_responses[i] == item['ans'])
+                st.session_state.score = score
+                st.session_state.test_submitted = True
+                st.rerun()
+    else:
+        # Result Display
+        st.markdown(f"<div class='result-card'>🎯 Your Score: {st.session_state.score} / {len(OFFICIAL_QUESTIONS)}</div>", unsafe_allow_html=True)
+        if st.button("🔄 Retake Exam"):
+            st.session_state.test_submitted = False
+            st.rerun()
+        if st.button("⬅️ Back to Syllabus"): navigate_to("Paper", st.session_state.selected_paper)
 
 def navigate_to(page, data=None):
     st.session_state.page = page
-    if data:
-        if page == "Paper": st.session_state.selected_paper = data
-        if page == "Study": st.session_state.selected_topic = data
+    if data: st.session_state.selected_paper = data
     st.rerun()
 
-# ================= ROUTER =================
+# ================= MAIN =================
 apply_android_style()
 if st.session_state.page == "Home": show_home()
 elif st.session_state.page == "Paper": show_paper()
-elif st.session_state.page == "Study": show_study()
+elif st.session_state.page == "Exam": show_exam()
     
