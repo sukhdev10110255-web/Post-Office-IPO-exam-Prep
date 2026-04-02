@@ -1,182 +1,152 @@
 import streamlit as st
-import os, json, re
+import os, re, json
 import PyPDF2
-from datetime import datetime
 from cerebras.cloud.sdk import Cerebras
 
 # ================= CONFIG =================
-st.set_page_config(page_title="Avyan LDCE IP v14.0", layout="wide")
-
-# ================= SETTINGS =================
-theme = st.selectbox("🎨 Theme", ["Light","Dark"])
-lang = st.selectbox("🌐 Language", ["Bilingual","English","Hindi"])
-
-if theme == "Dark":
-    st.markdown("<style>.stApp{background:#0e1117;color:white}</style>", unsafe_allow_html=True)
-
-def format_prompt(text):
-    if lang=="English": return f"Answer in English:\n{text}"
-    elif lang=="Hindi": return f"Answer in Hindi:\n{text}"
-    else: return f"Answer in English and Hindi:\n{text}"
+st.set_page_config(page_title="Avyan LDCE v14.0", layout="wide")
 
 # ================= AI =================
 def ai(prompt):
     try:
         client = Cerebras(api_key=os.getenv("CEREBRAS_API_KEY"))
         res = client.chat.completions.create(
-            model="llama3.1-8b",
+            model="llama3.1-8b-instant",
             messages=[{"role":"user","content":prompt}],
-            max_tokens=1200
+            max_tokens=1000
         )
         return res.choices[0].message.content
-    except:
-        return "AI Error"
+    except Exception as e:
+        return f"AI Error: {str(e)}"
 
 # ================= PDF =================
 def read_pdf(file):
     reader = PyPDF2.PdfReader(file)
-    return "".join([p.extract_text() or "" for p in reader.pages])[:15000]
+    return "".join([p.extract_text() or "" for p in reader.pages])[:10000]
 
 # ================= SESSION =================
-for key in ["page","questions","weak","exam_q","index","score","chat","content","saved"]:
-    if key not in st.session_state:
-        st.session_state[key] = [] if key in ["questions","exam_q","chat","saved"] else {} if key=="weak" else 0 if key in ["index","score"] else "" if key=="content" else "home"
+defaults = {
+    "current_topic":"",
+    "search_query":"",
+    "questions":[],
+    "weak":{},
+}
+for k,v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
-# ================= HOME =================
-if st.session_state.page == "home":
-    st.title("🚀 Avyan LDCE IP Exam Masterpiece v14.0")
+# ================= UI =================
+st.title("🚀 Avyan LDCE IP Exam Masterpiece v14.0")
 
-    cols = st.columns(4)
-    for i,p in enumerate(["Paper 1","Paper 2","Paper 3","Paper 4"]):
-        if cols[i].button(p):
-            st.session_state.paper = p
-            st.session_state.page = "mode"
+# ================= SEARCH =================
+st.subheader("🌐 Smart Browser")
 
-# ================= MODE =================
-elif st.session_state.page == "mode":
-    st.title(st.session_state.paper)
+col1, col2 = st.columns([4,1])
 
-    c1,c2,c3 = st.columns(3)
-    if c1.button("🔍 Topic"): st.session_state.input="topic"; st.session_state.page="study"
-    if c2.button("📄 PDF"): st.session_state.input="pdf"; st.session_state.page="study"
-    if c3.button("🤖 AI Course"): st.session_state.input="ai"; st.session_state.page="study"
+with col1:
+    query = st.text_input("🔍 Search (Acts / Rules / PDF)", key="search_box")
 
-# ================= STUDY =================
-elif st.session_state.page == "study":
+with col2:
+    if st.button("Search"):
+        st.session_state.search_query = query
 
-    st.title("📚 Study Dashboard")
+query = st.session_state.search_query
 
-    # ---------- Topic ----------
-    if st.session_state.input == "topic":
-        topic = st.text_area("Enter Topic", value=st.session_state.content)
-        if st.button("🔎 Enter Topic"):
-            st.session_state.content = topic
-
-    # ---------- PDF ----------
-    elif st.session_state.input == "pdf":
-        pdf = st.file_uploader("Upload PDF")
-        if pdf:
-            st.session_state.content = read_pdf(pdf)
-
-    # ---------- AI ----------
-    elif st.session_state.input == "ai":
-        if st.button("Generate AI Syllabus"):
-            st.session_state.content = ai(f"Generate LDCE syllabus for {st.session_state.paper}")
-
-    content = st.session_state.content
-
-    # ================= SMART BROWSER =================
-    st.markdown("## 🌐 Smart Browser")
-
-    query = st.text_input("🔍 Search Anything (Acts / Rules / PDF)")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.markdown(f"[🔎 Google](https://www.google.com/search?q={query})")
-
-    with col2:
-        st.markdown(f"[🧠 Bing](https://www.bing.com/search?q={query})")
-
-    with col3:
-        st.markdown(f"[📚 DuckDuckGo](https://duckduckgo.com/?q={query})")
+# 🔗 Search links
+if query:
+    st.markdown(f"[🔎 Google](https://www.google.com/search?q={query})")
+    st.markdown(f"[🧠 Bing](https://www.bing.com/search?q={query})")
+    st.markdown(f"[📚 DuckDuckGo](https://duckduckgo.com/?q={query})")
 
     if st.button("📄 Find PDFs"):
-        st.markdown(f"[📥 Open PDF Results](https://www.google.com/search?q={query}+filetype:pdf)")
+        st.markdown(f"[📥 PDF Results](https://www.google.com/search?q={query}+filetype:pdf)")
 
     if st.button("🤖 Explain Topic"):
-        st.write(ai(format_prompt(query)))
+        st.write(ai(f"Explain in Hindi and English:\n{query}"))
 
-    if st.button("💾 Save Topic Offline"):
-        st.session_state.saved.append(query)
-        st.success("Saved!")
+    if st.button("📖 Use for Study"):
+        st.session_state.current_topic = query
+        st.session_state.questions = []
+        st.success("Topic set for study!")
 
-    # ================= LEARNING =================
-    st.markdown("## 🎯 Study Modes")
+# ================= INPUT =================
+st.subheader("📚 Study Input")
 
-    col1,col2,col3,col4,col5 = st.columns(5)
+topic = st.text_area("Enter Topic")
 
-    if col1.button("📖 Learn"):
-        st.write(ai(format_prompt(f"Explain: {content}")))
+if st.button("🔎 Enter Topic"):
+    st.session_state.current_topic = topic
+    st.session_state.questions = []
+    st.success("Topic updated!")
 
-    if col2.button("💬 Chat"):
-        q = st.text_input("Ask Question")
-        if q:
-            st.session_state.chat.append(("user", q))
-            reply = ai(q)
-            st.session_state.chat.append(("ai", reply))
+pdf = st.file_uploader("Upload PDF")
+if pdf:
+    st.session_state.current_topic = read_pdf(pdf)
+    st.success("PDF loaded!")
 
-    for role,msg in st.session_state.chat:
-        st.write(f"{role}: {msg}")
+# ================= STUDY =================
+st.subheader("🎯 Study Modes")
 
-    # ================= MCQ =================
-    if col3.button("📝 MCQ"):
-        st.session_state.questions = [{
-            "question":"Sample Question",
-            "options":["A","B","C","D"],
-            "correct_answer":"A"
-        }]
+col1, col2, col3, col4 = st.columns(4)
+
+# ---------- LEARN ----------
+if col1.button("📖 Learn"):
+    topic = st.session_state.current_topic
+    if topic:
+        st.write(ai(f"Explain for exam in Hindi and English:\n{topic}"))
+    else:
+        st.warning("Enter topic first")
+
+# ---------- CHAT ----------
+if col2.button("💬 Chat"):
+    q = st.text_input("Ask doubt")
+    if q:
+        st.write(ai(q))
+
+# ---------- MCQ ----------
+if col3.button("📝 MCQ"):
+    topic = st.session_state.current_topic
+    if topic:
+        res = ai(f"Generate 5 MCQs in JSON:\n{topic}")
+        try:
+            data = json.loads(re.search(r'\{.*\}', res, re.DOTALL).group())
+            st.session_state.questions = data["questions"]
+        except:
+            st.error("MCQ generation failed")
+
+# ---------- EXAM ----------
+if col4.button("🧪 Final Exam"):
+    st.session_state.score = 0
+
+# ================= MCQ DISPLAY =================
+if st.session_state.questions:
+    st.subheader("📝 MCQ Practice")
 
     for i,q in enumerate(st.session_state.questions):
-        st.write(q["question"])
-        ans = st.radio("Choose", q["options"], key=f"mcq{i}")
+        st.write(f"Q{i+1}: {q['question']}")
+
+        ans = st.radio("Choose", q["options"], key=f"q{i}")
 
         if st.button(f"Check {i}"):
             if ans == q["correct_answer"]:
-                st.success("Correct")
+                st.success("✅ Correct")
             else:
-                st.error("Wrong")
-                st.session_state.weak[q["question"]] = 1
+                st.error("❌ Wrong")
+                st.session_state.weak[q["question"]] = q["correct_answer"]
 
-    # ================= EXAM =================
-    if col5.button("🧪 Final Exam"):
-        st.session_state.exam_q = st.session_state.questions
-        st.session_state.index = 0
-        st.session_state.score = 0
-        st.session_state.start = datetime.now()
+# ================= WEAK =================
+st.subheader("📉 Weak Topics")
 
-    if st.session_state.exam_q:
-        q = st.session_state.exam_q[st.session_state.index]
-        st.write(q["question"])
+if st.session_state.weak:
+    for w in st.session_state.weak:
+        with st.expander(w):
+            st.write("Correct:", st.session_state.weak[w])
+else:
+    st.success("No weak topics yet!")
 
-        ans = st.radio("Answer", q["options"], key="exam")
-
-        if st.button("Submit"):
-            if ans == q["correct_answer"]:
-                st.session_state.score += 1
-            else:
-                st.session_state.score -= 0.25
-
-        st.write("Score:", st.session_state.score)
-
-    # ================= WEAK =================
-    st.markdown("## 📊 Weak Topics")
-    st.write(st.session_state.weak)
-
-    if st.button("🧠 Smart Revision"):
-        st.write(ai(format_prompt(f"Teach weak topics: {list(st.session_state.weak.keys())}")))
-
-    # ================= OFFLINE =================
-    st.markdown("## 📂 Offline Saved Topics")
-    for s in st.session_state.saved:
-        st.write("📌", s)
+if st.button("🧠 Smart Revision"):
+    weak_list = list(st.session_state.weak.keys())
+    if weak_list:
+        st.write(ai(f"Teach these weak topics:\n{weak_list}"))
+    else:
+        st.warning("No weak topics")
