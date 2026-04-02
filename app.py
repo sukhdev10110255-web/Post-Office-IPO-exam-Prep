@@ -1,10 +1,9 @@
 import streamlit as st
 import os
-from PyPDF2 import PdfReader
 from cerebras.cloud.sdk import Cerebras
 
-# ================= CONFIG & THEME =================
-st.set_page_config(page_title="Avyan LDCE v24.2 Pro", layout="wide", initial_sidebar_state="collapsed")
+# ================= CONFIG =================
+st.set_page_config(page_title="Avyan LDCE v24.3", layout="wide", initial_sidebar_state="collapsed")
 
 def apply_android_style():
     theme_bg = "#121212" if st.session_state.get('theme') == "Dark" else "#F0F2F6"
@@ -14,7 +13,6 @@ def apply_android_style():
         .stApp {{ background-color: {theme_bg}; color: {text_col}; }}
         .header-text {{ text-align: center; font-weight: bold; font-size: 32px; color: #ff4b4b; padding: 10px; }}
         .stButton>button {{ width: 100%; border-radius: 12px; height: 3.5em; font-weight: 600; border: 1px solid #ccc; }}
-        .syllabus-card {{ background: #ffffff; padding: 10px; border-radius: 10px; border-left: 5px solid #ff4b4b; margin-bottom: 10px; color: #333; }}
         </style>
     """, unsafe_allow_html=True)
 
@@ -26,52 +24,64 @@ if "page" not in st.session_state:
         "lang": "Bilingual",
         "selected_paper": None,
         "selected_topic": None,
-        "test_submitted": False,
-        "score": 0
+        "active_model": "None"
     })
 
-# ================= FULL UPDATED 2025 SYLLABUS (from PDF) =================
+# ================= FULL SYLLABUS (Aug 2025 Order) =================
 SYLLABUS_2025 = {
     "Paper 1": [
-        "Post Office Act 2023", "Post Office Rules 2024", "PO Guide Part I & II", 
+        "The Post Office Act, 2023", "The Post Office Rules, 2024", "PO Guide Part I & II", 
         "Government Savings Promotion Act 1873", "Prevention of Money Laundering Act 2002", 
         "Consumer Protection Act 2019", "Information Technology Act 2000",
         "POSB Manual Vol I, II & III", "SANKALAN (PLI Rules)", "CCS Conduct Rules 1964", 
-        "CCS CCA Rules 1965", "GDS Rules 2020", "IT Modernization 2.0", "DIGIPIN",
-        "Mail Network Optimization Project", "Dak Ghar Niryat Kendra (DNK)"
+        "CCS CCA Rules 1965", "GDS Rules 2020", "IT Modernization 2.0 (APT Knowledge)", 
+        "DIGIPIN Basic Understanding", "Dak Ghar Niryat Kendra (DNKs)"
     ],
     "Paper 2": [
         "Noting (Approx 200 words)", 
         "Drafting (Approx 200 words)", 
-        "Draft Major Penalty Charge Sheet (Rule 14)"
+        "Draft Major Penalty Charge Sheet"
     ],
     "Paper 3": [
-        "Constitution of India (Preamble, Fundamental Rights/Duties)", 
-        "Bharatiya Nagarik Suraksha Sanhita 2023 (BNSS)", 
-        "Central Administrative Tribunal Act 1985", "RTI Act 2005 & Rules 2012", 
-        "Manuals on Procurement (Goods, Works, Consultancy)", "CCS Pension Rules 2021", 
-        "CCS GPF Rules 1961", "GFR 2017 (Ch 2 & 6)", "FHB Vol I & II", 
+        "Constitution of India (Fundamental Rights/Duties)", 
+        "The Bharatiya Nagarik Suraksha Sanhita, 2023 (BNSS)", 
+        "Central Administrative Tribunal Act, 1985", "RTI Act, 2005", 
+        "Manuals on Procurement", "CCS Pension Rules 2021", 
+        "CCS GPF Rules 1961", "GFR 2017 (Chapter 2 & 6)", "FHB Volume I & II", 
         "English Language", "General Knowledge & Current Affairs",
-        "Reasoning & Quantitative Aptitude", "Ethics & Interpersonal Skills"
+        "Reasoning & Quantitative Aptitude"
     ]
 }
 
-# ================= AI ENGINE (Hyper-Switch) =================
+# ================= UNIVERSAL AI ENGINE (Model Fix) =================
 def call_ai(prompt):
     api_key = os.getenv("CEREBRAS_API_KEY")
+    if not api_key: return "❌ CEREBRAS_API_KEY missing in Render."
+    
     client = Cerebras(api_key=api_key)
-    models = ["llama-3.3-70b-versatile", "llama3.1-8b"]
-    for model in models:
+    # Trying all known working names on Cerebras
+    models_to_test = [
+        "llama-3.3-70b-versatile", 
+        "llama-3.1-70b-versatile",
+        "llama-3.1-8b-instant",
+        "llama3.1-70b",
+        "llama3.1-8b"
+    ]
+    
+    for model_name in models_to_test:
         try:
             res = client.chat.completions.create(
-                model=model,
-                messages=[{"role":"system", "content": f"Expert LDCE Tutor. Lang: {st.session_state.lang}"},
-                          {"role":"user", "content": prompt}],
-                max_tokens=2000
+                model=model_name,
+                messages=[{"role": "system", "content": "You are an expert LDCE IP Tutor."},
+                          {"role": "user", "content": f"In {st.session_state.lang}: {prompt}"}],
+                max_tokens=1500
             )
+            st.session_state.active_model = model_name
             return res.choices[0].message.content
-        except: continue
-    return "⚠️ AI connectivity failed."
+        except Exception:
+            continue
+            
+    return "⚠️ AI Connectivity Fail: All models failed. Please verify your API Key."
 
 # ================= PAGES =================
 
@@ -79,19 +89,20 @@ def show_home():
     st.markdown("<h1 class='header-text'>Welcome Trainee</h1>", unsafe_allow_html=True)
     st.divider()
     c1, c2, c3 = st.columns(3)
-    if c1.button("📜 Paper 1 (250m)"): navigate_to("Paper", "Paper 1")
-    if c2.button("✍️ Paper 2 (50m)"): navigate_to("Paper", "Paper 2")
-    if c3.button("📊 Paper 3 (300m)"): navigate_to("Paper", "Paper 3")
+    if c1.button("Paper 1 (250m)"): navigate_to("Paper", "Paper 1")
+    if c2.button("Paper 2 (50m)"): navigate_to("Paper", "Paper 2")
+    if c3.button("Paper 3 (300m)"): navigate_to("Paper", "Paper 3")
     
-    st.sidebar.selectbox("Theme", ["Light", "Dark"], key="theme")
-    st.sidebar.selectbox("Language", ["Bilingual", "Hindi", "English"], key="lang")
+    with st.sidebar:
+        st.selectbox("Theme", ["Light", "Dark"], key="theme")
+        st.selectbox("Language", ["Bilingual", "Hindi", "English"], key="lang")
+        st.caption(f"Active Model: {st.session_state.active_model}")
 
 def show_paper():
     paper = st.session_state.selected_paper
     st.markdown(f"<h1 class='header-text'>Prepare {paper}</h1>", unsafe_allow_html=True)
-    st.markdown(f"**Syllabus for {paper} (Aug 2025 Updates):** Click a topic to study.")
+    st.write(f"### Click a topic to study ({paper}):")
     
-    # CLICKABLE SYLLABUS RESTORED
     cols = st.columns(2)
     for i, topic in enumerate(SYLLABUS_2025.get(paper, [])):
         if cols[i%2].button(f"📘 {topic}"):
@@ -100,46 +111,38 @@ def show_paper():
     st.divider()
     col_back, col_exam = st.columns(2)
     if col_back.button("⬅️ Back to Home"): navigate_to("Home")
-    if col_exam.button("📝 Take Live Exam"): navigate_to("Exam")
+    if col_exam.button("📝 Take Live Exam"): st.info("Exam System Initializing...")
 
 def show_study():
     topic = st.session_state.selected_topic
     st.markdown(f"<h1 class='header-text'>{topic}</h1>", unsafe_allow_html=True)
     
-    tab1, tab2, tab3 = st.tabs(["📖 AI Notes", "💬 AI Chat", "📝 MCQ Practice"])
+    tab1, tab2, tab3 = st.tabs(["📖 AI Notes", "💬 AI Discussion", "📝 MCQ Practice"])
     
     with tab1:
         if st.button("✨ Generate Detailed Notes"):
-            with st.spinner("Analyzing Departmental Rules..."):
-                st.markdown(call_ai(f"Provide professional notes on {topic} for Inspector Posts Exam 2025."))
+            with st.spinner("Connecting to AI..."):
+                st.markdown(call_ai(f"Provide professional notes on '{topic}' for LDCE IP Exam."))
     
     with tab2:
-        q = st.chat_input("Ask a doubt about this topic...")
+        q = st.chat_input("Ask a doubt...")
         if q: st.write(call_ai(f"Topic: {topic}. Query: {q}"))
         
     with tab3:
-        if st.button("Generate Test"):
+        if st.button("Generate MCQs"):
             st.markdown(call_ai(f"Generate 5 MCQs on {topic}."))
 
     if st.button("⬅️ Back to Syllabus"): navigate_to("Paper", st.session_state.selected_paper)
 
-def show_exam():
-    # Previous Exam Logic Restored...
-    st.markdown("<h1 class='header-text'>Live Exam Mode</h1>", unsafe_allow_html=True)
-    st.info("Mock Test based on 2024 Paper-IV questions.")
-    if st.button("⬅️ Back to Syllabus"): navigate_to("Paper", st.session_state.selected_paper)
-
 def navigate_to(page, data=None):
     st.session_state.page = page
-    if data:
-        if page == "Paper": st.session_state.selected_paper = data
-        if page == "Study": st.session_state.selected_topic = data
+    if page == "Paper": st.session_state.selected_paper = data
+    if page == "Study": st.session_state.selected_topic = data
     st.rerun()
 
-# ================= MAIN ROUTER =================
+# ================= ROUTER =================
 apply_android_style()
 if st.session_state.page == "Home": show_home()
 elif st.session_state.page == "Paper": show_paper()
 elif st.session_state.page == "Study": show_study()
-elif st.session_state.page == "Exam": show_exam()
     
