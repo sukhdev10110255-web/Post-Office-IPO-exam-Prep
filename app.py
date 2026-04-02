@@ -1,115 +1,140 @@
 import streamlit as st
 import os
-import pandas as pd
 from PyPDF2 import PdfReader
 from cerebras.cloud.sdk import Cerebras
 
-# ================= CONFIG =================
-st.set_page_config(page_title="Avyan LDCE v20.3", layout="wide", page_icon="🚀")
+# ================= CONFIG & THEME =================
+st.set_page_config(page_title="Avyan LDCE App", layout="wide", initial_sidebar_state="collapsed")
 
-# --- FULL SYLLABUS DATA (Paper 1 to 4) ---
+# --- UI Styling (Android App Look) ---
+def apply_android_style():
+    theme_bg = "#121212" if st.session_state.get('theme') == "Dark" else "#F0F2F6"
+    text_col = "white" if st.session_state.get('theme') == "Dark" else "black"
+    st.markdown(f"""
+        <style>
+        .stApp {{ background-color: {theme_bg}; color: {text_col}; }}
+        .header-text {{ text-align: center; font-weight: bold; font-family: 'sans-serif'; }}
+        .stButton>button {{ width: 100%; border-radius: 15px; height: 3.5em; font-weight: bold; border: 1px solid #ddd; }}
+        .topic-card {{ padding: 15px; border-radius: 10px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); color: black; cursor: pointer; margin-bottom: 10px; }}
+        </style>
+    """, unsafe_allow_html=True)
+
+# ================= STATE MANAGEMENT =================
+if "page" not in st.session_state:
+    st.session_state.update({
+        "page": "Home",
+        "theme": "Light",
+        "lang": "Bilingual",
+        "selected_paper": None,
+        "selected_topic": None,
+        "results": [],
+        "weak_points": []
+    })
+
+# ================= SYLLABUS DATA (Updated 3 Papers) =================
 SYLLABUS = {
-    "Paper 1": [
-        "PO Guide Part I (General)", "PO Guide Part II (Foreign Post)", 
-        "POSB Manual Vol I & II", "PLI/RPLI Rules 2024", 
-        "IT Modernization Project 2.0", "Post Office Act 2023"
-    ],
-    "Paper 2": [
-        "Postal Manual Volume V", "Postal Manual Volume VI (Part I, II, III)", 
-        "Postal Manual Volume VII", "FHB Volume I & II", 
-        "CCS Conduct Rules 1964", "CCS CCA Rules 1965"
-    ],
-    "Paper 3": [
-        "Indian Constitution", "Indian Economy & Post", 
-        "General Awareness", "Logical Reasoning", 
-        "Basic Mathematics (Percentage, Profit/Loss, Interest)"
-    ],
-    "Paper 4": [
-        "English to Hindi Translation", "Hindi to English Translation", 
-        "Letter Writing (Official)", "Drafting & Noting", "Precis Writing"
-    ]
+    "Paper 1": ["PO Guide Part I", "PO Guide Part II", "POSB Manual Vol I", "POSB Manual Vol II", "POSB Manual Vol III", "PLI/RPLI Rules 2024", "IT Modernization Project 2.0"],
+    "Paper 2": ["Postal Manual Vol V", "Postal Manual Vol VI (Part I, II, III)", "Postal Manual Vol VII", "FHB Vol I", "FHB Vol II", "CCS Conduct Rules 1964", "CCS CCA Rules 1965"],
+    "Paper 3": ["Indian Constitution", "Central Administrative Tribunal Act 1985", "RTI Act 2005", "Consumer Protection Act", "Indian Economy", "General Intelligence & Reasoning", "Arithmetic"]
 }
 
-# ================= AI ENGINE (Auto-Switching Logic) =================
+# ================= AI ENGINE =================
 def call_ai(prompt):
-    # Try these models in order until one works
-    models_to_try = ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "llama3.1-8b"]
-    
+    models = ["llama-3.3-70b-versatile", "llama-3.1-8b"]
     api_key = os.getenv("CEREBRAS_API_KEY")
-    if not api_key: return "❌ Error: API Key missing in Render Environment."
-
     client = Cerebras(api_key=api_key)
-    
-    for model_name in models_to_try:
+    for m in models:
         try:
-            res = client.chat.completions.create(
-                model=model_name,
-                messages=[
-                    {"role": "system", "content": "You are an expert LDCE Exam Tutor for India Post. Provide notes in Hindi and English."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=1500
-            )
-            return res.choices[0].message.content, model_name
-        except Exception:
-            continue # Try next model if this one fails
+            res = client.chat.completions.create(model=m, messages=[{"role":"user","content":prompt}], max_tokens=1500)
+            return res.choices[0].message.content
+        except: continue
+    return "⚠️ Connection Error. Check API Key."
+
+# ================= PAGES =================
+
+# --- PAGE 1: HOME ---
+def show_home():
+    # Top Right Controls
+    col_l, col_c, col_r = st.columns([1,2,1])
+    with col_r:
+        st.session_state.theme = st.selectbox("Theme", ["Light", "Dark"], label_visibility="collapsed")
+        st.session_state.lang = st.selectbox("Language", ["Bilingual", "Hindi", "English"], label_visibility="collapsed")
+    
+    with col_c:
+        st.markdown("<h1 class='header-text'>Welcome Trainee</h1>", unsafe_allow_html=True)
+        # Search Bar
+        search_q = st.text_input("🔍 Search Topic", placeholder="Enter topic to search online...")
+        engine = st.selectbox("Engine", ["Google", "Bing", "DuckDuckGo"], horizontal=True)
+        if search_q:
+            st.markdown(f"[Click to Search Online](https://www.google.com/search?q={search_q})")
+        
+        st.divider()
+        st.subheader("Choose Your Exam Paper")
+        c1, c2, c3 = st.columns(3)
+        if c1.button("Paper 1"): navigate_to("Paper", "Paper 1")
+        if c2.button("Paper 2"): navigate_to("Paper", "Paper 2")
+        if c3.button("Paper 3"): navigate_to("Paper", "Paper 3")
+
+# --- PAGE 2: PAPER SYLLABUS ---
+def show_paper():
+    paper = st.session_state.selected_paper
+    st.markdown(f"<h1 class='header-text'>Let's Prepare {paper}</h1>", unsafe_allow_html=True)
+    
+    st.write("### 📋 Updated Syllabus")
+    cols = st.columns(2)
+    for i, topic in enumerate(SYLLABUS[paper]):
+        if cols[i%2].button(f"📌 {topic}"):
+            navigate_to("Study", topic)
+
+    st.divider()
+    b1, b2, b3 = st.columns(3)
+    if b1.button("📝 Give Exam"): st.toast("Exam Mode Starting...")
+    if b2.button("📊 Previous Results"): st.info("No records yet.")
+    if b3.button("🧠 Weak Points"): st.warning("Smart Revision Loading...")
+    
+    if st.button("⬅️ Back to Home"): navigate_to("Home")
+
+# --- PAGE 3: STUDY TOPIC ---
+def show_study():
+    topic = st.session_state.selected_topic
+    st.markdown(f"<h1 class='header-text'>{topic}</h1>", unsafe_allow_html=True)
+    
+    # PDF Attachment UI
+    with st.expander("📂 Attached PDF Document"):
+        uploaded_file = st.file_uploader("Upload PDF for this topic", type="pdf")
+        if uploaded_file: st.success("PDF Context Loaded.")
+
+    # Main Content Tabs
+    tab1, tab2, tab3, tab4 = st.tabs(["📖 AI Notes", "💬 AI Discussion", "📝 MCQ Test", "📉 Weak Point"])
+    
+    with tab1:
+        if st.button("✨ Generate Short Notes"):
+            with st.spinner("Writing..."):
+                st.write(call_ai(f"Provide smart short notes on {topic} in {st.session_state.lang}"))
+    
+    with tab2:
+        query = st.text_input("Ask AI about this topic...")
+        if query: st.write(call_ai(f"Regarding {topic}: {query}"))
+        
+    with tab3:
+        if st.button("Generate Test"):
+            st.write(call_ai(f"Generate 5 MCQs for {topic}"))
             
-    return "⚠️ All models failed. Please check Cerebras Dashboard for latest model names.", "None"
+    with tab4:
+        st.write("Tracking your progress for this topic...")
 
-# ================= UI LAYOUT =================
-st.title("🚀 Avyan LDCE IP Masterpiece v20.3")
+    if st.button("⬅️ Back to Syllabus"): navigate_to("Paper", st.session_state.selected_paper)
 
-# --- SIDEBAR: Paper & Clickable Topics ---
-with st.sidebar:
-    st.header("📋 Exam Selection")
-    paper_choice = st.selectbox("Choose Paper", list(SYLLABUS.keys()))
-    st.divider()
+# --- NAVIGATION HELPER ---
+def navigate_to(page, data=None):
+    st.session_state.page = page
+    if page == "Paper": st.session_state.selected_paper = data
+    if page == "Study": st.session_state.selected_topic = data
+    st.rerun()
+
+# ================= APP ROUTER =================
+apply_android_style()
+if st.session_state.page == "Home": show_home()
+elif st.session_state.page == "Paper": show_paper()
+elif st.session_state.page == "Study": show_study()
     
-    st.subheader("📌 Topics (Click to Load)")
-    for topic in SYLLABUS[paper_choice]:
-        if st.button(topic):
-            st.session_state.current_topic = topic
-
-# ================= MAIN DASHBOARD =================
-if "current_topic" not in st.session_state:
-    st.session_state.current_topic = SYLLABUS["Paper 1"][0]
-
-col_left, col_right = st.columns([2, 1])
-
-with col_left:
-    st.subheader(f"📖 Subject: {st.session_state.current_topic}")
-    
-    if st.button(f"✨ Generate Pro Notes (Hindi + English)"):
-        with st.spinner("AI is analyzing departmental rules..."):
-            notes_prompt = f"Explain '{st.session_state.current_topic}' in detail for Inspector Posts Exam. Use bullet points. Provide English content first, followed by a Hindi translation."
-            content, used_model = call_ai(notes_prompt)
-            st.session_state.latest_notes = content
-            st.session_state.active_model = used_model
-            st.markdown(content)
-
-    st.divider()
-    st.subheader("💬 AI Discussion")
-    query = st.chat_input("Ask a doubt...")
-    if query:
-        st.write(f"**You:** {query}")
-        ans, _ = call_ai(f"Topic: {st.session_state.current_topic}. Question: {query}")
-        st.write(f"**AI:** {ans}")
-
-with col_right:
-    st.subheader("🎯 Quick Tools")
-    if st.button("📝 Create MCQ Practice"):
-        with st.spinner("Generating 5 MCQs..."):
-            q_prompt = f"Generate 5 tough MCQs on {st.session_state.current_topic} with options and hidden answers."
-            mcqs, _ = call_ai(q_prompt)
-            st.write(mcqs)
-    
-    st.divider()
-    st.subheader("📂 Reference PDF")
-    pdf = st.file_uploader("Upload Circular", type="pdf")
-    if pdf:
-        st.success("PDF Context Active!")
-
-# --- FOOTER ---
-st.markdown("---")
-active_m = st.session_state.get('active_model', 'Searching...')
-st.caption(f"System: V20.3 Stable | Active Model: {active_m} | User: Satya Prakash Yadav")
